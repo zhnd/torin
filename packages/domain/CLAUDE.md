@@ -1,12 +1,11 @@
 # @torin/domain
 
-Core domain types — the unified language of the Torin system.
+Core domain types — the shared type contracts of the Torin system.
 
 ## Responsibilities
 
-- Define all shared types: Task, TaskStatus, ExecutionStep, RunContext, Artifact, etc.
-- Provide type-level contracts that all other packages depend on
-- Ensure a single source of truth for domain models across server, worker, web, and workflow
+- Define shared types used across packages
+- Current types: `TaskStatus`, `AnalyzeRepositoryInput`, `AnalysisResult`
 
 ## Dependencies
 

@@ -12,24 +12,27 @@ pnpm monorepo. Each package has its own CLAUDE.md with detailed responsibilities
 
 ```
 apps/
-  server/       # HTTP API entry point
-  web/          # Frontend — task dashboard, logs, controls
+  server/       # GraphQL API (Apollo Server + Fastify)
+  web/          # Frontend — Next.js 15 task dashboard
   worker/       # Temporal worker process
 
 packages/
+  database/     # Prisma schema, migrations, shared client, Pothos types
   domain/       # Core types shared across the system
   workflow/     # Temporal workflows, activities, and client
-  agent/        # LLM calls, planner, prompt builders
-  shared/       # Logger, config, error utilities
+  agent/        # Claude Agent SDK, prompts, sandbox tools
+  sandbox/      # Isolated execution environment (Docker-based)
+  shared/       # Pino logger, utilities
 ```
 
 ### Dependency direction
 
 ```
-server → workflow/client → domain
-worker → workflow → agent → domain
+server → database, workflow/client, shared
+worker → workflow → agent → sandbox
+workflow → database (activities), domain
 All packages may use shared
-web → server (HTTP only)
+web → server (GraphQL only)
 ```
 
 ### Key principle
@@ -39,7 +42,14 @@ agent decides *what* to do; workflow activities *execute* it. Temporal is the ru
 ## Build & Dev
 
 - Package manager: pnpm (v10.33+)
-- `pnpm build` / `pnpm dev` / `pnpm typecheck` from root runs across all packages
+- `pnpm -r typecheck` — type check all packages
+- `pnpm format-fix` / `pnpm lint-fix` — format and lint via Biome
+- `pnpm docker:up:dev` — start Postgres, Temporal, Temporal UI
+- Dev scripts use `tsx watch --conditions development --env-file=../../.env`
+
+## Logging
+
+Structured logging via Pino (`@torin/shared`). Each package has a `src/logger.ts` exporting a single `log` instance. Dev: pino-pretty (colored). Prod: JSON. Control via `LOG_LEVEL` env var.
 
 ## Design Principles
 

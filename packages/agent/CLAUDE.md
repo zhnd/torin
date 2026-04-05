@@ -1,19 +1,32 @@
 # @torin/agent
 
-AI/LLM integration layer — the "thinking" part of Torin.
+AI analysis layer — uses Claude Agent SDK to analyze code in sandboxed environments.
 
 ## Responsibilities
 
-- Encapsulate LLM API calls (prompt construction, response parsing)
-- Implement planning: break tasks into executable steps
-- Provide strategy patterns for different task types (bugfix, implementation, analysis)
-- Manage prompt templates and context assembly
+- Run Claude Agent SDK `query()` with custom MCP sandbox tools
+- Manage prompt templates (`src/prompts/`) for different task types
+- Parse and validate structured agent responses
+- Provide sandbox tools (bash, read_file, list_files) that delegate to the `Sandbox` interface
+
+## Internal structure
+
+```
+src/
+  prompts/              # Prompt templates per task type
+    analyze-repository.ts
+  tools/
+    sandbox-tools.ts    # MCP tools wrapping Sandbox interface
+  analyze.ts            # Repository analysis orchestration
+  logger.ts             # Package-level Pino logger
+```
 
 ## Dependencies
 
-- `@torin/domain` — shared types
-- `@torin/shared` — utilities
+- `@torin/sandbox` — sandbox interface for code execution
+- `@torin/domain` — shared types (AnalysisResult, etc.)
+- `@torin/shared` — logger
 
 ## Key constraint
 
-Agent produces plans and decisions but does not execute them. Execution is the responsibility of workflow activities. Agent has no direct access to repos, shells, or external systems — it only returns structured instructions.
+Agent operates exclusively through the `Sandbox` interface — it never has direct access to the host filesystem or shell. All code exploration happens inside the sandboxed environment. Model is configurable via `AGENT_MODEL` env var.

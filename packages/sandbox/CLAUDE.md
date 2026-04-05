@@ -4,13 +4,16 @@ Isolated code execution environment for the Torin system.
 
 ## Responsibilities
 
-- Define a unified `Sandbox` interface for code execution in isolated environments
+- Define a unified `Sandbox` interface (`id`, `executeCommand`, `readFile`, `listFiles`, `destroy`)
 - Provide a Docker-based implementation using dockerode (MVP)
-- Manage sandbox lifecycle: create, execute, destroy
+- Support sandbox lifecycle: create, reconnect by ID, destroy
+- `createDockerSandbox(options)` — create container, install git, clone repo
+- `connectDockerSandbox(id)` — reconnect to existing container (for cross-activity use)
 
 ## Dependencies
 
-None (`@torin/*` packages). Only third-party: dockerode.
+- `@torin/shared` — logger
+- Third-party: dockerode
 
 ## Key constraint
 
