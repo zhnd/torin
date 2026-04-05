@@ -1,0 +1,41 @@
+{
+  "name": "@torin/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./pothos-types": {
+      "types": "./src/__generated__/pothos-prisma-types.ts",
+      "development": "./src/__generated__/pothos-prisma-types.ts",
+      "import": "./dist/__generated__/pothos-prisma-types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/client": "^7.6.0",
+    "@prisma/client-runtime-utils": "^7.6.0",
+    "dotenv": "^17.4.0",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0",
+    "prisma": "^7.6.0",
+    "@pothos/plugin-prisma": "^4.14.3",
+    "graphql": "^16.13.2"
+  }
+}

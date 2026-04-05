@@ -1,0 +1,5 @@
+{
+  "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
+    "pnpm biome check --write --no-errors-on-unmatched"
+  ]
+}

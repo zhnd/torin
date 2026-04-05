@@ -1,0 +1,40 @@
+{
+  "name": "@torin/workflow",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./workflows": {
+      "types": "./src/workflows/index.ts",
+      "development": "./src/workflows/index.ts",
+      "import": "./dist/workflows/index.js"
+    },
+    "./activities": {
+      "types": "./src/activities/index.ts",
+      "development": "./src/activities/index.ts",
+      "import": "./dist/activities/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.15.0",
+    "@temporalio/client": "^1.15.0",
+    "@temporalio/common": "^1.15.0",
+    "@temporalio/workflow": "^1.15.0",
+    "@torin/agent": "workspace:*",
+    "@torin/database": "workspace:*",
+    "@torin/domain": "workspace:*",
+    "@torin/sandbox": "workspace:*",
+    "@torin/shared": "workspace:*"
+  }
+}

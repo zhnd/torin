@@ -1,0 +1,22 @@
+{
+  "name": "@torin/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --conditions development --env-file=../../.env src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@temporalio/worker": "^1.15.0",
+    "@torin/agent": "workspace:*",
+    "@torin/domain": "workspace:*",
+    "@torin/shared": "workspace:*",
+    "@torin/workflow": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.0"
+  }
+}
