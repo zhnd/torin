@@ -30,12 +30,28 @@ src/
     graphql/      # Pothos builder, schema, context
     routes/       # Fastify route registration (GraphQL, health)
     auth/         # better-auth config
-    errors/       # Error types
-  modules/
-    task/         # Task GraphQL type, query, mutation
+    errors/       # Error types (AppError, NotFoundError, UnauthorizedError)
+  modules/{domain}/
+    {domain}.schema.ts       # GraphQL types only (builder.prismaObject)
+    {domain}.resolvers.ts    # Queries + Mutations (instantiate service, call execute)
+    services/
+      {operation}.service.ts # Business logic (validation, auth, Prisma ops)
+    dto/
+      {operation}.input.ts   # GraphQL input types (builder.inputType)
+    index.ts                 # Entry: imports schema + resolvers for side-effect registration
   logger.ts       # Package-level Pino logger
   server.ts       # Fastify bootstrap
 ```
+
+## Module conventions
+
+- **Schema and resolvers are separate files** — never mix type definitions with query/mutation logic
+- **One service per operation** — no god services; class with `execute()` method
+- **Resolvers are thin** — instantiate service, call `service.execute(query, input, user)`, return result
+- **Services own business logic** — validation, authorization, Prisma operations
+- **Use error classes** from `infrastructure/errors/` (NotFoundError, UnauthorizedError)
+- **Always spread `query`** in Prisma calls for Pothos N+1 optimization
+- **Register modules** in `infrastructure/graphql/schema.ts` via side-effect import
 
 ## Key constraint
 

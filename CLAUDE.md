@@ -42,7 +42,7 @@ agent decides *what* to do; workflow activities *execute* it. Temporal is the ru
 ## Build & Dev
 
 - Package manager: pnpm (v10.33+)
-- `pnpm -r typecheck` — type check all packages
+- `pnpm -r check-types` — type check all packages
 - `pnpm format-fix` / `pnpm lint-fix` — format and lint via Biome
 - `pnpm docker:up:dev` — start Postgres, Temporal, Temporal UI
 - Dev scripts use `tsx watch --conditions development --env-file=../../.env`

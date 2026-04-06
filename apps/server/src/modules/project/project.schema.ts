@@ -1,14 +1,15 @@
 import { builder } from '../../infrastructure/graphql/builder.js';
 
-builder.prismaObject('Task', {
+builder.prismaObject('Project', {
   fields: (t) => ({
     id: t.exposeID('id'),
-    type: t.exposeString('type'),
-    status: t.exposeString('status'),
+    name: t.exposeString('name'),
     repositoryUrl: t.exposeString('repositoryUrl'),
-    result: t.expose('result', { type: 'Json', nullable: true }),
-    error: t.exposeString('error', { nullable: true }),
-    workflowId: t.exposeString('workflowId', { nullable: true }),
+    authMethod: t.exposeString('authMethod'),
+    hasCredentials: t.boolean({
+      resolve: (project) => !!project.encryptedCredentials,
+    }),
+    tasks: t.relation('tasks'),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
   }),
