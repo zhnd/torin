@@ -36,8 +36,8 @@ export const builder = new SchemaBuilder<{
     cursorType: 'String',
   },
   scopeAuth: {
-    authScopes: (_ctx) => ({
-      authenticated: true,
+    authScopes: (ctx) => ({
+      authenticated: !!ctx.user,
     }),
   },
 });

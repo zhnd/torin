@@ -12,11 +12,23 @@
   "dependencies": {
     "@apollo/client": "^3.13.8",
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@hookform/resolvers": "^5.2.2",
+    "@tanstack/react-table": "^8.21.3",
     "@torin/domain": "workspace:*",
+    "better-auth": "^1.5.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "graphql": "^16.13.2",
+    "lucide-react": "^1.7.0",
     "next": "^15.4.2",
+    "next-themes": "^0.4.6",
+    "radix-ui": "^1.4.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.72.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@graphql-codegen/cli": "^5.0.7",

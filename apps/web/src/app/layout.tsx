@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { ApolloWrapper } from '@/lib/apollo-wrapper';
+import { Toaster } from '@/components/ui/sonner';
+import { ApolloWrapper } from '@/libs/apollo';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -14,10 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-zinc-950 text-zinc-100 antialiased">
-        <ApolloWrapper>
-          <div className="mx-auto max-w-4xl px-4 py-8">{children}</div>
-        </ApolloWrapper>
+      <body>
+        <ApolloWrapper>{children}</ApolloWrapper>
+        <Toaster position="top-center" richColors closeButton />
       </body>
     </html>
   );

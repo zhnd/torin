@@ -14,6 +14,12 @@ datasource db {
   provider = "postgresql"
 }
 
+enum AuthMethod {
+  NONE
+  TOKEN
+  SSH_KEY
+}
+
 model User {
   id            String    @id
   name          String
@@ -24,9 +30,27 @@ model User {
   updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
+  projects      Project[]
+  tasks         Task[]
 
   @@unique([email])
   @@map("user")
+}
+
+model Project {
+  id                   String     @id @default(cuid())
+  name                 String
+  repositoryUrl        String
+  authMethod           AuthMethod @default(NONE)
+  encryptedCredentials String?
+  userId               String
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks                Task[]
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@index([userId])
+  @@map("project")
 }
 
 model Session {
@@ -85,8 +109,14 @@ model Task {
   result        Json?
   error         String?
   workflowId    String?
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  projectId     String?
+  project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@index([userId])
+  @@index([projectId])
   @@map("task")
 }
