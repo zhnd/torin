@@ -58,12 +58,31 @@ export async function createDockerSandbox(
     `apt-get update -qq && apt-get install -y -qq git > /dev/null 2>&1`
   );
   log.debug('Cloning repo');
+  const cloneDepth = options.fullClone ? '' : '--depth 1';
   await execInContainer(
     docker,
     container,
-    `git clone --depth 1 ${options.repoUrl} ${REPO_DIR}`
+    `git clone ${cloneDepth} ${options.repoUrl} ${REPO_DIR}`
   );
   log.info({ sandboxId: container.id }, 'Repo cloned');
+
+  if (options.gitToken) {
+    log.debug('Configuring git auth');
+    // Inject token into remote URL for push access
+    const authedUrl = options.repoUrl.replace(
+      'https://github.com/',
+      `https://x-access-token:${options.gitToken}@github.com/`
+    );
+    await execInContainer(
+      docker,
+      container,
+      [
+        `git config user.name "torin-bot"`,
+        `git config user.email "torin-bot@users.noreply.github.com"`,
+        `git remote set-url origin "${authedUrl}"`,
+      ].join(' && ')
+    );
+  }
 
   return buildSandbox(docker, container);
 }
@@ -106,6 +125,26 @@ function buildSandbox(docker: Docker, container: Docker.Container): Sandbox {
 
     async executeCommand(command: string): Promise<CommandResult> {
       return execInContainer(docker, container, command);
+    },
+
+    async writeFile(path: string, content: string): Promise<void> {
+      const absPath = path.startsWith('/') ? path : `${REPO_DIR}/${path}`;
+      // Ensure parent directory exists
+      await execInContainer(
+        docker,
+        container,
+        `mkdir -p "$(dirname "${absPath}")"`
+      );
+      // Use base64 encoding for safe transfer of arbitrary content
+      const encoded = Buffer.from(content).toString('base64');
+      const result = await execInContainer(
+        docker,
+        container,
+        `echo "${encoded}" | base64 -d > "${absPath}"`
+      );
+      if (result.exitCode !== 0) {
+        throw new Error(`Failed to write file ${path}: ${result.stderr}`);
+      }
     },
 
     async readFile(path: string): Promise<string> {

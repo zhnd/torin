@@ -4,10 +4,7 @@ import {
   Clock,
   ExternalLink,
   FileText,
-  Maximize2,
-  MoreHorizontal,
   Package,
-  Pencil,
   Shield,
   ShieldCheck,
   XCircle,
@@ -16,35 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/utils/cn';
 import type { TaskDetail } from '../../types';
-import { StageTrack } from '../stage-track';
 
 interface OverviewTabProps {
   detail: TaskDetail;
-}
-
-function CardActions() {
-  return (
-    <div className="flex gap-0.5">
-      <button
-        type="button"
-        className="p-1 text-muted-foreground/30 hover:text-muted-foreground transition-colors"
-      >
-        <Pencil className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        className="p-1 text-muted-foreground/30 hover:text-muted-foreground transition-colors"
-      >
-        <Maximize2 className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        className="p-1 text-muted-foreground/30 hover:text-muted-foreground transition-colors"
-      >
-        <MoreHorizontal className="h-3 w-3" />
-      </button>
-    </div>
-  );
 }
 
 export function OverviewTab({ detail }: OverviewTabProps) {
@@ -55,43 +26,34 @@ export function OverviewTab({ detail }: OverviewTabProps) {
       {/* Execution Summary */}
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              Execution Summary
-            </CardTitle>
-            <CardActions />
-          </div>
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            Execution Summary
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <StageTrack
-            stages={task.stages}
-            stageDetails={task.stageDetails}
-            size="md"
-            showLabels
-          />
-          <div className="grid grid-cols-2 gap-4">
+        <CardContent>
+          <div className="flex gap-6">
             <div>
               <p className="text-[11px] text-muted-foreground">Duration</p>
-              <p className="text-2xl font-bold tracking-tight tabular-nums">
+              <p className="text-xl font-bold tracking-tight tabular-nums">
                 {task.duration}
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-muted-foreground">Total Tokens</p>
-              <p className="text-2xl font-bold tracking-tight tabular-nums font-mono">
+              <p className="text-[11px] text-muted-foreground">Tokens</p>
+              <p className="text-base font-bold tracking-tight tabular-nums font-mono">
                 {(summary.totalTokens / 1000).toFixed(1)}k
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-muted-foreground">Total Cost</p>
-              <p className="text-2xl font-bold tracking-tight tabular-nums font-mono">
+              <p className="text-[11px] text-muted-foreground">Cost</p>
+              <p className="text-xl font-bold tracking-tight tabular-nums font-mono">
                 {summary.totalCost}
               </p>
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground">Model</p>
-              <p className="mt-1 text-sm font-mono font-medium">
+              <p className="mt-0.5 text-base font-mono font-medium">
                 {task.model.replace('claude-', '').split('-202')[0]}
               </p>
             </div>
@@ -99,7 +61,7 @@ export function OverviewTab({ detail }: OverviewTabProps) {
         </CardContent>
       </Card>
 
-      {/* Health / Risk — tinted card */}
+      {/* Health / Risk */}
       <Card
         className={cn(
           summary.pathDeviation || summary.errorCount > 0
@@ -108,13 +70,10 @@ export function OverviewTab({ detail }: OverviewTabProps) {
         )}
       >
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              Health &amp; Risk
-            </CardTitle>
-            <CardActions />
-          </div>
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <Shield className="h-4 w-4 text-muted-foreground" />
+            Health &amp; Risk
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-baseline gap-2">
@@ -128,7 +87,7 @@ export function OverviewTab({ detail }: OverviewTabProps) {
               confidence
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="flex gap-6">
             <div>
               <p className="text-[11px] text-muted-foreground">Deviation</p>
               <p className="mt-0.5 text-sm font-medium">
@@ -144,13 +103,13 @@ export function OverviewTab({ detail }: OverviewTabProps) {
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground">Errors</p>
-              <p className="mt-0.5 text-lg font-bold tabular-nums">
+              <p className="mt-0.5 text-base font-bold tabular-nums">
                 {summary.errorCount}
               </p>
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground">Retries</p>
-              <p className="mt-0.5 text-lg font-bold tabular-nums">
+              <p className="mt-0.5 text-base font-bold tabular-nums">
                 {summary.retryCount}
               </p>
             </div>
@@ -161,13 +120,10 @@ export function OverviewTab({ detail }: OverviewTabProps) {
       {/* Inputs / Context */}
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Inputs &amp; Context
-            </CardTitle>
-            <CardActions />
-          </div>
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            Inputs &amp; Context
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -176,60 +132,65 @@ export function OverviewTab({ detail }: OverviewTabProps) {
               {summary.description}
             </p>
           </div>
-          <div>
-            <p className="text-[11px] text-muted-foreground">Related Issue</p>
-            <p className="mt-0.5 text-sm font-mono font-semibold">
-              {summary.issue}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] text-muted-foreground">Context Files</p>
-            <div className="mt-1 space-y-0.5">
-              {summary.contextFiles.map((f) => (
-                <p
-                  key={f}
-                  className="text-[11px] font-mono text-muted-foreground"
-                >
-                  {f}
-                </p>
-              ))}
+          {summary.issue && (
+            <div>
+              <p className="text-[11px] text-muted-foreground">Related Issue</p>
+              <p className="mt-0.5 text-sm font-mono font-semibold">
+                {summary.issue}
+              </p>
             </div>
-          </div>
+          )}
+          {summary.contextFiles.length > 0 && (
+            <div>
+              <p className="text-[11px] text-muted-foreground">Context Files</p>
+              <div className="mt-1 space-y-0.5">
+                {summary.contextFiles.map((f) => (
+                  <p
+                    key={f}
+                    className="text-[11px] font-mono text-muted-foreground"
+                  >
+                    {f}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Outputs / Artifacts */}
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <Package className="h-4 w-4 text-muted-foreground" />
-              Outputs &amp; Artifacts
-            </CardTitle>
-            <CardActions />
-          </div>
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <Package className="h-4 w-4 text-muted-foreground" />
+            Outputs &amp; Artifacts
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
-            <p className="text-[11px] text-muted-foreground">Generated Files</p>
-            <div className="mt-1 space-y-0.5">
-              {summary.outputs.map((f) => (
-                <p
-                  key={f}
-                  className="text-[11px] font-mono text-muted-foreground"
-                >
-                  {f}
-                </p>
-              ))}
+          {summary.outputs.length > 0 && (
+            <div>
+              <p className="text-[11px] text-muted-foreground">
+                Generated Files
+              </p>
+              <div className="mt-1 space-y-0.5">
+                {summary.outputs.map((f) => (
+                  <p
+                    key={f}
+                    className="text-[11px] font-mono text-muted-foreground"
+                  >
+                    {f}
+                  </p>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           {summary.prUrl && (
             <div>
               <p className="text-[11px] text-muted-foreground">Pull Request</p>
               <p className="mt-0.5 text-sm">
                 <span className="inline-flex items-center gap-1.5 font-medium hover:underline cursor-pointer">
                   <ExternalLink className="h-3 w-3" />
-                  PR #142
+                  {summary.prUrl}
                 </span>
               </p>
             </div>
@@ -263,22 +224,15 @@ export function OverviewTab({ detail }: OverviewTabProps) {
       </Card>
 
       {/* Approvals / HITL */}
-      <Card className="lg:col-span-2">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
+      {approvals.length > 0 && (
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm font-medium">
               <ShieldCheck className="h-4 w-4 text-muted-foreground" />
               Approvals &amp; Human-in-the-Loop
             </CardTitle>
-            <CardActions />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {approvals.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No approvals required
-            </p>
-          ) : (
+          </CardHeader>
+          <CardContent>
             <div className="space-y-2">
               {approvals.map((a) => (
                 <div
@@ -316,9 +270,9 @@ export function OverviewTab({ detail }: OverviewTabProps) {
                 </div>
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { type ColumnDef, createColumnHelper } from '@tanstack/react-table';
 import type { ExecutionStatus } from '@torin/domain';
-import { ExternalLink, RotateCcw } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/utils/cn';
@@ -181,14 +181,6 @@ export const columns: ColumnDef<TaskItem, any>[] = [
         >
           <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
         </Link>
-        <button
-          type="button"
-          className="p-1 rounded hover:bg-accent transition-colors"
-          title="Retry"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
       </div>
     ),
   }),

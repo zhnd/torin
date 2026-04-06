@@ -5,5 +5,6 @@ export const UpdateProjectInput = builder.inputType('UpdateProjectInput', {
     id: t.string({ required: true }),
     name: t.string(),
     repositoryUrl: t.string(),
+    credentials: t.string({ description: 'GitHub personal access token' }),
   }),
 });

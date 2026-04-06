@@ -95,7 +95,7 @@ export function CostTab({ breakdown }: CostTabProps) {
                   <TableCell>
                     <div className="h-2 w-full rounded-full bg-muted">
                       <div
-                        className="h-2 rounded-full bg-foreground/60"
+                        className="h-2 rounded-full bg-foreground/80"
                         style={{
                           width: `${(row.cost / maxCost) * 100}%`,
                         }}

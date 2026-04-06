@@ -36,14 +36,20 @@ export function useService({
   async function onSubmit(values: ProjectFormValues) {
     setError(null);
     try {
+      // Only send credentials if the user actually typed something
+      const credentials = values.credentials || undefined;
       if (mode === 'create') {
-        const { data } = await createProject({ variables: values });
+        const { data } = await createProject({
+          variables: { ...values, credentials },
+        });
         if (data?.createProject?.id) {
           toast.success('Project created');
           router.push(`/projects/${data.createProject.id}`);
         }
       } else if (projectId) {
-        await updateProject({ variables: { id: projectId, ...values } });
+        await updateProject({
+          variables: { id: projectId, ...values, credentials },
+        });
         toast.success('Project updated');
       }
     } catch (err) {

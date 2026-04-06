@@ -2,6 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { AnalysisResult } from '@torin/domain';
 import type { Sandbox } from '@torin/sandbox';
 import { log } from './logger.js';
+import type { AgentObserver } from './observer.js';
 import {
   ANALYZE_SYSTEM_PROMPT,
   ANALYZE_USER_PROMPT,
@@ -9,7 +10,8 @@ import {
 import { createSandboxMcpServer } from './tools/sandbox-tools.js';
 
 export async function analyzeRepository(
-  sandbox: Sandbox
+  sandbox: Sandbox,
+  observer?: AgentObserver
 ): Promise<AnalysisResult> {
   const sandboxServer = createSandboxMcpServer(sandbox);
 
@@ -39,6 +41,7 @@ export async function analyzeRepository(
       maxTurns: 20,
     },
   })) {
+    observer?.onMessage(message);
     log.debug(
       {
         type: message.type,

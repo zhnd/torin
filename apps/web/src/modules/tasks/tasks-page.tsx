@@ -1,27 +1,31 @@
 'use client';
 
-import { Play } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useQuery } from '@apollo/client';
 import { TaskTable } from './components/task-table';
-import { MOCK_TASKS } from './mock-data';
+import { GET_TASKS } from './graphql';
+import { transformTaskToItem } from './transform';
 
 export function TasksPage() {
+  const { data, loading } = useQuery(GET_TASKS, {
+    pollInterval: 5000,
+  });
+
+  const tasks = (data?.tasks ?? []).map(transformTaskToItem);
+
   return (
-    <div className="flex flex-col h-full gap-5">
-      <div className="flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            All task executions across your projects
-          </p>
-        </div>
-        <Button size="default" className="rounded-lg px-5">
-          <Play className="mr-2 h-4 w-4" />
-          New Task
-        </Button>
+    <div className="flex flex-col h-full gap-4">
+      <div className="shrink-0">
+        <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          All task executions across your projects
+        </p>
       </div>
 
-      <TaskTable data={MOCK_TASKS} />
+      {loading && tasks.length === 0 ? (
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      ) : (
+        <TaskTable data={tasks} />
+      )}
     </div>
   );
 }

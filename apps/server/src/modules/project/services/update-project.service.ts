@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '@torin/database';
+import { encrypt, getEncryptionKey } from '@torin/shared';
 import type { User } from 'better-auth';
 import {
   NotFoundError,
@@ -31,15 +32,25 @@ export class UpdateProjectService {
       throw new NotFoundError('Project', input.id);
     }
 
+    const data: Prisma.ProjectUpdateInput = {
+      ...(input.name != null && { name: input.name }),
+      ...(input.repositoryUrl != null && {
+        repositoryUrl: input.repositoryUrl,
+      }),
+    };
+
+    if (input.credentials) {
+      data.authMethod = 'TOKEN';
+      data.encryptedCredentials = encrypt(
+        input.credentials,
+        getEncryptionKey()
+      );
+    }
+
     return this.prisma.project.update({
       ...query,
       where: { id: input.id },
-      data: {
-        ...(input.name != null && { name: input.name }),
-        ...(input.repositoryUrl != null && {
-          repositoryUrl: input.repositoryUrl,
-        }),
-      },
+      data,
     });
   }
 }

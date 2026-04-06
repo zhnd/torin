@@ -33,88 +33,87 @@ interface TimelineTabProps {
 export function TimelineTab({ detail }: TimelineTabProps) {
   const { task, timeline, health } = detail;
 
+  const hasDeviation =
+    health.missingSteps.length > 0 || task.badges.includes('path_deviation');
+
   return (
     <div className="space-y-6">
-      {/* Path Compare */}
-      <Card
-        className={
-          health.missingSteps.length > 0
-            ? 'border-amber-200 bg-amber-50/30'
-            : ''
-        }
-      >
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <GitCompareArrows className="h-4 w-4 text-muted-foreground" />
-            Expected vs Actual Path
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-3">
-            <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Expected
-            </span>
-            <div className="flex items-center gap-2 text-xs">
-              {health.expectedPath.map((stage, i) => (
-                <span key={stage} className="flex items-center gap-2">
-                  <span className="font-mono font-medium text-foreground/70">
-                    {STAGE_LABELS[stage]}
+      {/* Path Compare — only show when deviation detected */}
+      {hasDeviation && (
+        <Card className="border-amber-200 bg-amber-50/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <GitCompareArrows className="h-4 w-4 text-muted-foreground" />
+              Expected vs Actual Path
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                Expected
+              </span>
+              <div className="flex items-center gap-2 text-xs">
+                {health.expectedPath.map((stage, i) => (
+                  <span key={stage} className="flex items-center gap-2">
+                    <span className="font-mono font-medium text-foreground/70">
+                      {STAGE_LABELS[stage]}
+                    </span>
+                    {i < health.expectedPath.length - 1 && (
+                      <span className="text-muted-foreground/40">&rarr;</span>
+                    )}
                   </span>
-                  {i < health.expectedPath.length - 1 && (
-                    <span className="text-muted-foreground/40">&rarr;</span>
-                  )}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Actual
-            </span>
-            <StageTrack
-              stages={task.stages}
-              stageDetails={task.stageDetails}
-              size="md"
-              showLabels
-            />
-          </div>
-          {health.missingSteps.length > 0 && (
-            <div className="flex items-start gap-2 pt-1">
-              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-medium text-amber-700">
-                  Deviation detected
-                </p>
-                {health.missingSteps.map((step) => (
-                  <p key={step} className="text-xs text-amber-600">
-                    Missing step: {step}
-                  </p>
                 ))}
               </div>
             </div>
-          )}
-          {task.badges.includes('path_deviation') &&
-            health.missingSteps.length === 0 && (
-              <p className="text-xs text-amber-600">
-                Deviation detected at implementation stage — agent switched
-                dependency.
-              </p>
+            <div className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                Actual
+              </span>
+              <StageTrack
+                stages={task.stages}
+                stageDetails={task.stageDetails}
+                size="md"
+                showLabels
+              />
+            </div>
+            {health.missingSteps.length > 0 && (
+              <div className="flex items-start gap-2 pt-1">
+                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-amber-700">
+                    Deviation detected
+                  </p>
+                  {health.missingSteps.map((step) => (
+                    <p key={step} className="text-xs text-amber-600">
+                      Missing step: {step}
+                    </p>
+                  ))}
+                </div>
+              </div>
             )}
-        </CardContent>
-      </Card>
+            {task.badges.includes('path_deviation') &&
+              health.missingSteps.length === 0 && (
+                <p className="text-xs text-amber-600">
+                  Deviation detected at implementation stage — agent switched
+                  dependency.
+                </p>
+              )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Timeline Events */}
       <div className="relative space-y-0">
         {timeline.map((event, eventIndex) => (
           <div
             key={`${event.timestamp}-${event.event}`}
-            className="flex gap-3 pb-4"
+            className="flex gap-3 pb-3"
           >
             {/* Vertical line + dot */}
             <div className="flex flex-col items-center">
               <div
                 className={cn(
-                  'h-2.5 w-2.5 rounded-full shrink-0 mt-1',
+                  'h-2 w-2 rounded-full shrink-0 mt-1.5',
                   LEVEL_DOT[event.level]
                 )}
               />

@@ -68,6 +68,24 @@ export function ProjectForm({
             )}
           />
 
+          <FormField
+            control={form.control}
+            name="credentials"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>GitHub Token (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="password"
+                    placeholder="ghp_xxxxxxxxxxxx"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <Button type="submit" disabled={isLoading}>
             {isLoading
               ? mode === 'create'

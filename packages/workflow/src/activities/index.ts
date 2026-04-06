@@ -1,4 +1,10 @@
+export { addPrReviewCommentsActivity } from './add-pr-review-comments.js';
+export { analyzeBugActivity } from './analyze-bug.js';
 export { analyzeCodeActivity } from './analyze-code.js';
+export { createPullRequestActivity } from './create-pull-request.js';
 export { createSandboxActivity } from './create-sandbox.js';
 export { destroySandboxActivity } from './destroy-sandbox.js';
+export { implementFixActivity } from './implement-fix.js';
+export { pushBranchActivity } from './push-branch.js';
+export { saveTaskEventsActivity } from './save-task-events.js';
 export { updateTaskStatusActivity } from './update-task.js';

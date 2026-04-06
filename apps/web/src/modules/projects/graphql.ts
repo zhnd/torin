@@ -39,8 +39,14 @@ export const GET_PROJECT = gql`
 
 export const CREATE_PROJECT = gql`
   ${PROJECT_FIELDS}
-  mutation CreateProject($name: String!, $repositoryUrl: String!) {
-    createProject(name: $name, repositoryUrl: $repositoryUrl) {
+  mutation CreateProject(
+    $name: String!
+    $repositoryUrl: String!
+    $credentials: String
+  ) {
+    createProject(
+      input: { name: $name, repositoryUrl: $repositoryUrl, credentials: $credentials }
+    ) {
       ...ProjectFields
     }
   }
@@ -48,8 +54,15 @@ export const CREATE_PROJECT = gql`
 
 export const UPDATE_PROJECT = gql`
   ${PROJECT_FIELDS}
-  mutation UpdateProject($id: String!, $name: String, $repositoryUrl: String) {
-    updateProject(id: $id, name: $name, repositoryUrl: $repositoryUrl) {
+  mutation UpdateProject(
+    $id: String!
+    $name: String
+    $repositoryUrl: String
+    $credentials: String
+  ) {
+    updateProject(
+      input: { id: $id, name: $name, repositoryUrl: $repositoryUrl, credentials: $credentials }
+    ) {
       ...ProjectFields
     }
   }

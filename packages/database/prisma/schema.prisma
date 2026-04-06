@@ -113,10 +113,35 @@ model Task {
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   projectId     String?
   project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  currentStage  String?
+  stages        Json?
+  totalCostUsd  Float?
+  inputTokens   Int?
+  outputTokens  Int?
+  durationMs    Int?
+  model         String?
+  costBreakdown Json?
+  events        TaskEvent[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([userId])
   @@index([projectId])
   @@map("task")
+}
+
+model TaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  stage     String
+  event     String
+  level     String   @default("info")
+  agent     String?
+  tool      String?
+  details   String?
+  timestamp DateTime @default(now())
+
+  @@index([taskId, timestamp])
+  @@map("task_event")
 }

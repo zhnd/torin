@@ -52,9 +52,24 @@ export function createSandboxMcpServer(sandbox: Sandbox) {
     }
   );
 
+  const writeFile = tool(
+    'write_file',
+    'Write content to a file in the repository. Creates parent directories if needed.',
+    {
+      path: z.string().describe('File path relative to the repository root'),
+      content: z.string().describe('The full file content to write'),
+    },
+    async (args) => {
+      await sandbox.writeFile(args.path, args.content);
+      return {
+        content: [{ type: 'text' as const, text: `Wrote ${args.path}` }],
+      };
+    }
+  );
+
   return createSdkMcpServer({
     name: 'sandbox',
     version: '1.0.0',
-    tools: [bash, readFile, listFiles],
+    tools: [bash, readFile, listFiles, writeFile],
   });
 }

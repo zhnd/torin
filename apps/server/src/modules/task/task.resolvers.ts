@@ -1,5 +1,8 @@
 import { builder } from '../../infrastructure/graphql/builder.js';
 import { AnalyzeRepositoryService } from './services/analyze-repository.service.js';
+import { CancelTaskService } from './services/cancel-task.service.js';
+import { FixBugService } from './services/fix-bug.service.js';
+import { ReviewTaskService } from './services/review-task.service.js';
 
 // ── Queries ──────────────────────────────────────────────
 
@@ -53,6 +56,62 @@ builder.mutationField('analyzeRepository', (t) =>
     resolve: async (query, _parent, args, ctx) => {
       const service = new AnalyzeRepositoryService(ctx.prisma);
       return service.execute(query, args.projectId, ctx.user);
+    },
+  })
+);
+
+builder.mutationField('fixBug', (t) =>
+  t.prismaField({
+    type: 'Task',
+    authScopes: { authenticated: true },
+    args: {
+      projectId: t.arg.string({ required: true }),
+      bugDescription: t.arg.string({ required: true }),
+    },
+    resolve: async (query, _parent, args, ctx) => {
+      const service = new FixBugService(ctx.prisma);
+      return service.execute(
+        query,
+        args.projectId,
+        args.bugDescription,
+        ctx.user
+      );
+    },
+  })
+);
+
+builder.mutationField('reviewTask', (t) =>
+  t.prismaField({
+    type: 'Task',
+    authScopes: { authenticated: true },
+    args: {
+      taskId: t.arg.string({ required: true }),
+      action: t.arg.string({ required: true }),
+      feedback: t.arg.string(),
+    },
+    resolve: async (query, _parent, args, ctx) => {
+      const service = new ReviewTaskService(ctx.prisma);
+      return service.execute(
+        query,
+        args.taskId,
+        args.action,
+        args.feedback,
+        ctx.user
+      );
+    },
+  })
+);
+
+builder.mutationField('cancelTask', (t) =>
+  t.prismaField({
+    type: 'Task',
+    authScopes: { authenticated: true },
+    args: {
+      taskId: t.arg.string({ required: true }),
+    },
+    resolve: async (query, _parent, args, ctx) => {
+      const service = new CancelTaskService(ctx.prisma);
+      return service.execute(query, args.taskId, ctx.user);
     },
   })
 );

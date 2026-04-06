@@ -21,9 +21,10 @@ interface StageTrackProps {
   showLabels?: boolean;
 }
 
-function dotClass(status: StageStatus, size: 'sm' | 'md'): string {
-  const base = size === 'sm' ? 'h-[6px] w-[6px]' : 'h-[9px] w-[9px]';
+// ── Small size (table rows): dots + lines ──────────────
 
+function dotClass(status: StageStatus): string {
+  const base = 'h-2 w-2';
   switch (status) {
     case 'completed':
       return cn(base, 'bg-foreground rounded-full');
@@ -56,6 +57,51 @@ function lineClass(fromStatus: StageStatus): string {
       return 'bg-muted-foreground/15';
   }
 }
+
+function labelClass(status: StageStatus): string {
+  switch (status) {
+    case 'running':
+      return 'text-foreground font-semibold';
+    case 'completed':
+      return 'text-foreground/70';
+    case 'failed':
+      return 'text-red-500 font-semibold';
+    default:
+      return 'text-muted-foreground/60';
+  }
+}
+
+// ── Medium size (detail page): segmented bar ───────────
+
+function segmentClass(status: StageStatus): string {
+  switch (status) {
+    case 'completed':
+      return 'bg-foreground';
+    case 'running':
+      return 'bg-foreground animate-pulse';
+    case 'failed':
+      return 'bg-red-500';
+    case 'skipped':
+      return 'bg-muted-foreground/20';
+    default:
+      return 'bg-muted-foreground/15';
+  }
+}
+
+function segmentLabelClass(status: StageStatus): string {
+  switch (status) {
+    case 'running':
+      return 'text-foreground font-semibold';
+    case 'completed':
+      return 'text-foreground/70';
+    case 'failed':
+      return 'text-red-500 font-semibold';
+    default:
+      return 'text-muted-foreground/50';
+  }
+}
+
+// ── Tooltip ────────────────────────────────────────────
 
 function StageTooltip({
   detail,
@@ -96,15 +142,61 @@ function StageTooltip({
   );
 }
 
+// ── Component ──────────────────────────────────────────
+
 export function StageTrack({
   stages,
   stageDetails,
   size = 'sm',
   showLabels = false,
 }: StageTrackProps) {
-  const lineWidth = size === 'sm' ? 'w-3' : 'w-6';
   const [hoveredStage, setHoveredStage] = useState<TaskStage | null>(null);
 
+  // Medium size: segmented progress bar
+  if (size === 'md') {
+    return (
+      <div className="flex flex-col gap-1.5 max-w-sm">
+        <div className="flex gap-1.5">
+          {TASK_STAGES.map((stage) => (
+            // biome-ignore lint/a11y/noStaticElementInteractions: hover tooltip on stage indicator
+            <div
+              key={stage}
+              className="relative flex-1"
+              onMouseEnter={() => stageDetails && setHoveredStage(stage)}
+              onMouseLeave={() => setHoveredStage(null)}
+            >
+              <div
+                className={cn(
+                  'h-1.5 rounded-full',
+                  segmentClass(stages[stage])
+                )}
+              />
+              {hoveredStage === stage && stageDetails?.[stage] && (
+                <StageTooltip detail={stageDetails[stage]} stage={stage} />
+              )}
+            </div>
+          ))}
+        </div>
+        {showLabels && (
+          <div className="flex gap-1.5">
+            {TASK_STAGES.map((stage) => (
+              <span
+                key={stage}
+                className={cn(
+                  'flex-1 text-[10px] leading-none text-center',
+                  segmentLabelClass(stages[stage])
+                )}
+              >
+                {STAGE_LABELS[stage]}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Small size: dots + lines
   return (
     <div className="flex items-start gap-0">
       {TASK_STAGES.map((stage, i) => (
@@ -115,19 +207,12 @@ export function StageTrack({
             onMouseEnter={() => stageDetails && setHoveredStage(stage)}
             onMouseLeave={() => setHoveredStage(null)}
           >
-            <div className={dotClass(stages[stage], size)} />
+            <div className={dotClass(stages[stage])} />
             {showLabels && (
               <span
                 className={cn(
-                  size === 'sm' ? 'text-[9px]' : 'text-[10px]',
-                  'leading-none',
-                  stages[stage] === 'running'
-                    ? 'text-foreground font-semibold'
-                    : stages[stage] === 'completed'
-                      ? 'text-foreground/70'
-                      : stages[stage] === 'failed'
-                        ? 'text-red-500 font-semibold'
-                        : 'text-muted-foreground/60'
+                  'text-[10px] leading-none',
+                  labelClass(stages[stage])
                 )}
               >
                 {STAGE_LABELS[stage]}
@@ -140,9 +225,7 @@ export function StageTrack({
           {i < TASK_STAGES.length - 1 && (
             <div
               className={cn(
-                'h-[1.5px] rounded-full mt-[2.5px]',
-                size === 'md' && 'mt-[4px]',
-                lineWidth,
+                'h-[2px] w-4 rounded-full mt-[3px]',
                 lineClass(stages[stage])
               )}
             />

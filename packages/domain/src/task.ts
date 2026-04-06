@@ -1,4 +1,9 @@
-export type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type TaskStatus =
+  | 'PENDING'
+  | 'RUNNING'
+  | 'AWAITING_REVIEW'
+  | 'COMPLETED'
+  | 'FAILED';
 
 export type TaskStage = 'analysis' | 'plan' | 'implement' | 'test' | 'pr';
 export type StageStatus =
@@ -25,3 +30,28 @@ export const TASK_STAGES: TaskStage[] = [
   'test',
   'pr',
 ];
+
+// ── Observability types ─────────────────────────────────
+
+export interface ObservedEvent {
+  stage: string;
+  event: string;
+  level: 'info' | 'warn' | 'error';
+  agent?: string;
+  tool?: string;
+  details?: string;
+  timestamp: string;
+}
+
+export interface AgentCost {
+  totalCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  model: string;
+}
+
+export interface AgentObservation {
+  events: ObservedEvent[];
+  cost: AgentCost | null;
+}

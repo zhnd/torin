@@ -22,7 +22,7 @@ export async function registerGraphQLRoutes(
   await app.register(fastifyApollo(apollo), {
     context: async (request, reply) => ({
       ...initContextCache(),
-      ...createContext(request, reply),
+      ...(await createContext(request, reply)),
     }),
   });
 }
