@@ -20,6 +20,9 @@ dist/
 .DS_Store
 *.pem
 
+# claude code local settings
+.claude/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
