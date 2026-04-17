@@ -1,7 +1,7 @@
 import { builder } from '../../infrastructure/graphql/builder.js';
 import { AnalyzeRepositoryService } from './services/analyze-repository.service.js';
 import { CancelTaskService } from './services/cancel-task.service.js';
-import { FixBugService } from './services/fix-bug.service.js';
+import { ResolveDefectService } from './services/resolve-defect.service.js';
 import { ReviewTaskService } from './services/review-task.service.js';
 
 // ── Queries ──────────────────────────────────────────────
@@ -60,20 +60,20 @@ builder.mutationField('analyzeRepository', (t) =>
   })
 );
 
-builder.mutationField('fixBug', (t) =>
+builder.mutationField('resolveDefect', (t) =>
   t.prismaField({
     type: 'Task',
     authScopes: { authenticated: true },
     args: {
       projectId: t.arg.string({ required: true }),
-      bugDescription: t.arg.string({ required: true }),
+      defectDescription: t.arg.string({ required: true }),
     },
     resolve: async (query, _parent, args, ctx) => {
-      const service = new FixBugService(ctx.prisma);
+      const service = new ResolveDefectService(ctx.prisma);
       return service.execute(
         query,
         args.projectId,
-        args.bugDescription,
+        args.defectDescription,
         ctx.user
       );
     },

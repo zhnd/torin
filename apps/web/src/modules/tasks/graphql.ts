@@ -61,9 +61,9 @@ export const GET_TASK = gql`
   ${TASK_DETAIL_FIELDS}
 `;
 
-export const FIX_BUG = gql`
-  mutation FixBug($projectId: String!, $bugDescription: String!) {
-    fixBug(projectId: $projectId, bugDescription: $bugDescription) {
+export const RESOLVE_DEFECT = gql`
+  mutation ResolveDefect($projectId: String!, $defectDescription: String!) {
+    resolveDefect(projectId: $projectId, defectDescription: $defectDescription) {
       ...TaskFields
     }
   }

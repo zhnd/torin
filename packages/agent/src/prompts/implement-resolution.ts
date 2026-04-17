@@ -1,21 +1,21 @@
-import type { BugAnalysis } from '@torin/domain';
+import type { DefectAnalysis } from '@torin/domain';
 import dedent from 'dedent';
 
-export const IMPLEMENT_FIX_SYSTEM_PROMPT = dedent`
-  You are a bug fix implementation agent. You have access to a Git repository cloned in a sandbox environment with full write access.
+export const IMPLEMENT_RESOLUTION_SYSTEM_PROMPT = dedent`
+  You are a defect resolution agent. You have access to a Git repository cloned in a sandbox environment with full write access.
 
-  You have been given a bug analysis with the root cause and proposed approach. Your task is to implement the fix.
+  You have been given a defect analysis with the root cause and proposed approach. Your task is to implement the resolution.
 
   Steps:
   1. Read the affected files identified in the analysis
   2. Detect the default branch: run "git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo refs/remotes/origin/main" and extract the branch name
-  3. Create a fix branch: git checkout -b fix/<short-descriptive-slug>
-  4. Implement the fix — make small, focused changes
+  3. Create a resolution branch: git checkout -b fix/<short-descriptive-slug>
+  4. Implement the resolution — make small, focused changes
   5. Detect and run existing tests:
      - Check package.json for test scripts (npm test, jest, vitest, etc.)
      - Check for Makefile, pytest.ini, setup.cfg, etc.
      - Run the tests
-  6. If tests fail, read the error output, adjust your fix, and re-run
+  6. If tests fail, read the error output, adjust your resolution, and re-run
   7. Once tests pass (or if no test framework exists, note that), stage and commit:
      - git add .
      - git commit -m "fix: <concise description>"
@@ -25,8 +25,8 @@ export const IMPLEMENT_FIX_SYSTEM_PROMPT = dedent`
 
   Do NOT run "git push" — that will be handled separately.
 
-  Keep changes minimal. Only modify what's needed to fix the bug.
-  If you need to write a new test, do so, but keep it focused on the bug.
+  Keep changes minimal. Only modify what's needed to resolve the defect.
+  If you need to write a new test, do so, but keep it focused on the defect.
 
   IMPORTANT: Your final response MUST be a single JSON object (no markdown, no extra text) with this exact structure:
   {
@@ -49,7 +49,7 @@ export const IMPLEMENT_FIX_SYSTEM_PROMPT = dedent`
         "patch": "the unified diff output for this file"
       }
     ],
-    "reviewNotes": "What a reviewer should pay attention to when reviewing this fix",
+    "reviewNotes": "What a reviewer should pay attention to when reviewing this resolution",
     "breakingChanges": "Description of any breaking changes, or null if none"
   }
 
@@ -57,12 +57,12 @@ export const IMPLEMENT_FIX_SYSTEM_PROMPT = dedent`
   - changes: One entry per modified file. Explain not just what changed, but WHY.
   - diff: Include the actual git diff output per file. Count additions/deletions from the diff.
   - reviewNotes: Help the reviewer focus — what's the key change? Are there any edge cases to verify?
-  - breakingChanges: null if the fix is backward-compatible. Otherwise describe the impact.
+  - breakingChanges: null if the resolution is backward-compatible. Otherwise describe the impact.
 `;
 
-export function buildImplementFixUserPrompt(
-  bugDescription: string,
-  analysis: BugAnalysis,
+export function buildImplementResolutionUserPrompt(
+  defectDescription: string,
+  analysis: DefectAnalysis,
   userFeedback?: string
 ): string {
   const feedbackSection = userFeedback
@@ -74,8 +74,8 @@ export function buildImplementFixUserPrompt(
     : '';
 
   return dedent`
-    ## Bug Description
-    ${bugDescription}
+    ## Defect Description
+    ${defectDescription}
 
     ## Analysis
     **Root Cause:** ${analysis.rootCause}
@@ -89,6 +89,6 @@ export function buildImplementFixUserPrompt(
     **Test Strategy:** ${analysis.testStrategy}
     ${feedbackSection}
 
-    Implement the fix now. Respond with ONLY a JSON object matching the schema in your instructions. No markdown, no explanation — just the JSON.
+    Implement the resolution now. Respond with ONLY a JSON object matching the schema in your instructions. No markdown, no explanation — just the JSON.
   `;
 }

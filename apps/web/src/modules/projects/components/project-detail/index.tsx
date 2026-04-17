@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { FIX_BUG } from '@/modules/tasks/graphql';
+import { RESOLVE_DEFECT } from '@/modules/tasks/graphql';
 import { ANALYZE_REPOSITORY, DELETE_PROJECT } from '../../graphql';
 import { ProjectForm } from '../project-form';
 
@@ -56,26 +56,26 @@ export function ProjectDetail({ project }: ProjectDetailProps) {
   const router = useRouter();
   const [analyzeRepository, { loading: analyzing }] =
     useMutation(ANALYZE_REPOSITORY);
-  const [fixBug, { loading: fixing }] = useMutation(FIX_BUG);
+  const [resolveDefect, { loading: resolving }] = useMutation(RESOLVE_DEFECT);
   const [deleteProject, { loading: deleting }] = useMutation(DELETE_PROJECT);
-  const [bugDescription, setBugDescription] = useState('');
-  const [fixBugOpen, setFixBugOpen] = useState(false);
+  const [defectDescription, setDefectDescription] = useState('');
+  const [resolveDefectOpen, setResolveDefectOpen] = useState(false);
 
-  async function handleFixBug() {
-    if (!bugDescription.trim()) return;
+  async function handleResolveDefect() {
+    if (!defectDescription.trim()) return;
     try {
-      const { data } = await fixBug({
-        variables: { projectId: project.id, bugDescription },
+      const { data } = await resolveDefect({
+        variables: { projectId: project.id, defectDescription },
       });
-      if (data?.fixBug?.id) {
-        toast.success('Bug fix started');
-        setFixBugOpen(false);
-        setBugDescription('');
-        router.push(`/tasks/${data.fixBug.id}`);
+      if (data?.resolveDefect?.id) {
+        toast.success('Defect resolution started');
+        setResolveDefectOpen(false);
+        setDefectDescription('');
+        router.push(`/tasks/${data.resolveDefect.id}`);
       }
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : 'Failed to start bug fix'
+        err instanceof Error ? err.message : 'Failed to start defect resolution'
       );
     }
   }
@@ -118,33 +118,33 @@ export function ProjectDetail({ project }: ProjectDetailProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={fixBugOpen} onOpenChange={setFixBugOpen}>
+          <Dialog open={resolveDefectOpen} onOpenChange={setResolveDefectOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Bug className="mr-2 h-4 w-4" />
-                Fix Bug
+                Resolve Defect
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
-                <DialogTitle>Fix a Bug</DialogTitle>
+                <DialogTitle>Resolve a Defect</DialogTitle>
                 <DialogDescription>
-                  Describe the bug and the agent will analyze, fix, and create a
-                  PR.
+                  Describe the defect and the agent will analyze, resolve, and
+                  open a PR.
                 </DialogDescription>
               </DialogHeader>
               <Textarea
-                placeholder="Describe the bug — what's happening, what should happen, steps to reproduce..."
+                placeholder="Describe the defect — what's happening, what should happen, steps to reproduce..."
                 rows={6}
-                value={bugDescription}
-                onChange={(e) => setBugDescription(e.target.value)}
+                value={defectDescription}
+                onChange={(e) => setDefectDescription(e.target.value)}
               />
               <DialogFooter>
                 <Button
-                  onClick={handleFixBug}
-                  disabled={fixing || !bugDescription.trim()}
+                  onClick={handleResolveDefect}
+                  disabled={resolving || !defectDescription.trim()}
                 >
-                  {fixing ? 'Starting...' : 'Start Fix'}
+                  {resolving ? 'Starting...' : 'Start Resolution'}
                 </Button>
               </DialogFooter>
             </DialogContent>

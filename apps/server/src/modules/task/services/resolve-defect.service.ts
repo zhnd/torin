@@ -11,13 +11,13 @@ interface TaskQuery {
   select?: Prisma.TaskSelect;
 }
 
-export class FixBugService {
+export class ResolveDefectService {
   constructor(private prisma: PrismaClient) {}
 
   async execute(
     query: TaskQuery,
     projectId: string,
-    bugDescription: string,
+    defectDescription: string,
     user: User | null
   ) {
     if (!user) {
@@ -38,7 +38,7 @@ export class FixBugService {
     const task = await this.prisma.task.create({
       ...query,
       data: {
-        type: 'FIX_BUG',
+        type: 'RESOLVE_DEFECT',
         repositoryUrl: project.repositoryUrl,
         status: 'PENDING',
         userId: user.id,
@@ -47,15 +47,15 @@ export class FixBugService {
     });
 
     const client = await createTemporalClient();
-    const handle = await client.workflow.start('fixBugWorkflow', {
+    const handle = await client.workflow.start('resolveDefectWorkflow', {
       taskQueue: TASK_QUEUE,
-      workflowId: `fix-bug-${task.id}`,
+      workflowId: `resolve-defect-${task.id}`,
       args: [
         {
           taskId: task.id,
           projectId: project.id,
           repositoryUrl: project.repositoryUrl,
-          bugDescription,
+          defectDescription,
         },
       ],
     });

@@ -11,11 +11,11 @@ export interface AnalysisResult {
   recommendations: string[];
 }
 
-export interface FixBugInput {
+export interface ResolveDefectInput {
   taskId: string;
   projectId: string;
   repositoryUrl: string;
-  bugDescription: string;
+  defectDescription: string;
 }
 
 export interface InvestigationStep {
@@ -30,7 +30,7 @@ export interface Evidence {
   explanation: string;
 }
 
-export interface BugAnalysis {
+export interface DefectAnalysis {
   rootCause: string;
   affectedFiles: string[];
   proposedApproach: string;
@@ -56,7 +56,7 @@ export interface FileDiff {
   patch: string;
 }
 
-export interface FixResult {
+export interface ResolutionResult {
   branch: string;
   baseBranch: string;
   commitSha: string;

@@ -127,7 +127,7 @@ export const MOCK_TASKS: TaskItem[] = [
     status: 'blocked',
     repo: 'acme/backend-api',
     branch: 'fix/n-plus-one',
-    workflow: 'bug-fix',
+    workflow: 'resolve-defect',
     model: 'claude-sonnet-4-20250514',
     currentStage: 'implement',
     stages: {
@@ -216,7 +216,7 @@ export const MOCK_TASKS: TaskItem[] = [
     status: 'failed',
     repo: 'acme/infra',
     branch: 'fix/ci-staging',
-    workflow: 'bug-fix',
+    workflow: 'resolve-defect',
     model: 'claude-sonnet-4-20250514',
     currentStage: 'test',
     stages: {

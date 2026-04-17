@@ -35,7 +35,7 @@ interface DiffReviewData {
   reviewNotes?: string;
   testsPassed?: boolean;
   testOutput?: string;
-  fix?: {
+  resolution?: {
     summary?: string;
     branch?: string;
   };
@@ -125,13 +125,13 @@ export function DiffReviewPanel({
   return (
     <div className="space-y-4">
       {/* Summary header */}
-      {data.fix?.summary && (
+      {data.resolution?.summary && (
         <Card>
           <CardContent className="py-4">
-            <p className="text-sm">{data.fix.summary}</p>
-            {data.fix.branch && (
+            <p className="text-sm">{data.resolution.summary}</p>
+            {data.resolution.branch && (
               <p className="mt-1 font-mono text-xs text-muted-foreground">
-                {data.fix.branch}
+                {data.resolution.branch}
               </p>
             )}
           </CardContent>

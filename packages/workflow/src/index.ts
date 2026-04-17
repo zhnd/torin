@@ -1,10 +1,10 @@
 export {
-  analyzeBugActivity,
   analyzeCodeActivity,
+  analyzeDefectActivity,
   createPullRequestActivity,
   createSandboxActivity,
   destroySandboxActivity,
-  implementFixActivity,
+  implementResolutionActivity,
   pushBranchActivity,
   updateTaskStatusActivity,
 } from './activities/index.js';
@@ -15,5 +15,5 @@ export {
 } from './client/index.js';
 export {
   analyzeRepositoryWorkflow,
-  fixBugWorkflow,
+  resolveDefectWorkflow,
 } from './workflows/index.js';

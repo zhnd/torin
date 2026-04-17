@@ -1,57 +1,57 @@
-import type { BugAnalysis, FixResult } from '@torin/domain';
+import type { DefectAnalysis, ResolutionResult } from '@torin/domain';
 
 export function buildPrBody(
-  bugDescription: string,
-  analysis: BugAnalysis,
-  fix: FixResult
+  defectDescription: string,
+  analysis: DefectAnalysis,
+  resolution: ResolutionResult
 ): string {
   const sections: string[] = [
-    '## Bug Description',
-    bugDescription,
+    '## Defect Description',
+    defectDescription,
     '',
     '## Root Cause',
     analysis.rootCause,
     '',
-    '## Fix Summary',
-    fix.summary,
+    '## Resolution Summary',
+    resolution.summary,
   ];
 
-  if (fix.changes && fix.changes.length > 0) {
+  if (resolution.changes && resolution.changes.length > 0) {
     sections.push('', '## Changes');
-    for (const change of fix.changes) {
+    for (const change of resolution.changes) {
       sections.push(`### \`${change.file}\``, change.description, '');
     }
   } else {
     sections.push(
       '',
       '## Changed Files',
-      ...fix.filesChanged.map((f) => `- \`${f}\``),
+      ...resolution.filesChanged.map((f) => `- \`${f}\``),
       ''
     );
   }
 
   sections.push(
     '## Test Results',
-    fix.testsPassed ? '✅ All tests passed' : '⚠️ Some tests did not pass'
+    resolution.testsPassed ? '✅ All tests passed' : '⚠️ Some tests did not pass'
   );
-  if (fix.testOutput) {
+  if (resolution.testOutput) {
     sections.push(
       '',
       '<details><summary>Test output</summary>',
       '',
       '```',
-      fix.testOutput,
+      resolution.testOutput,
       '```',
       '</details>'
     );
   }
 
-  if (fix.reviewNotes) {
-    sections.push('', '## Review Notes', fix.reviewNotes);
+  if (resolution.reviewNotes) {
+    sections.push('', '## Review Notes', resolution.reviewNotes);
   }
 
-  if (fix.breakingChanges) {
-    sections.push('', '## ⚠️ Breaking Changes', fix.breakingChanges);
+  if (resolution.breakingChanges) {
+    sections.push('', '## ⚠️ Breaking Changes', resolution.breakingChanges);
   }
 
   const confidenceTag = analysis.confidence

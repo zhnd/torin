@@ -5,9 +5,9 @@ import {
   setHandler,
 } from '@temporalio/workflow';
 import type {
-  BugAnalysis,
-  FixBugInput,
-  FixResult,
+  DefectAnalysis,
+  ResolutionResult,
+  ResolveDefectInput,
   ReviewDecision,
 } from '@torin/domain';
 import type { SandboxState } from '@torin/sandbox';
@@ -43,7 +43,9 @@ export const reviewSignal = defineSignal<[ReviewDecision]>('reviewDecision');
 
 // ── Workflow ────────────────────────────────────────────
 
-export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
+export async function resolveDefectWorkflow(
+  input: ResolveDefectInput
+): Promise<void> {
   let reviewResult: ReviewDecision | undefined;
   setHandler(reviewSignal, (decision) => {
     reviewResult = decision;
@@ -75,7 +77,7 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
 
     // ── Phase 2: Implement → Diff review loop ──
     await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
-    const fix = await implementLoop(
+    const resolution = await implementLoop(
       input,
       sandboxState,
       analysis,
@@ -97,23 +99,23 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
       { stage: 'pr', status: 'running' }
     );
 
-    await sandboxInfra.pushBranchActivity(sandboxState, fix.branch, {
+    await sandboxInfra.pushBranchActivity(sandboxState, resolution.branch, {
       projectId: input.projectId,
     });
 
     const prResult = await main.createPullRequestActivity(
       input.projectId,
-      fix.branch,
-      fix.baseBranch,
-      `Fix: ${fix.summary.slice(0, 60)}`,
-      buildPrBody(input.bugDescription, analysis, fix)
+      resolution.branch,
+      resolution.baseBranch,
+      `Fix: ${resolution.summary.slice(0, 60)}`,
+      buildPrBody(input.defectDescription, analysis, resolution)
     );
 
-    if (fix.changes?.length > 0) {
+    if (resolution.changes?.length > 0) {
       await main.addPrReviewCommentsActivity(
         input.projectId,
         prResult.number,
-        fix.changes
+        resolution.changes
       );
     }
 
@@ -132,7 +134,7 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
     );
 
     await main.updateTaskStatusActivity(input.taskId, 'COMPLETED', {
-      fix,
+      resolution,
       pullRequest: prResult,
     });
   } catch (err) {
@@ -152,9 +154,9 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
   // ── Inner loops ───────────────────────────────────────
 
   async function analyzeLoop(
-    input: FixBugInput,
+    input: ResolveDefectInput,
     sandboxState: SandboxState
-  ): Promise<{ analysis: BugAnalysis; feedback: string | undefined }> {
+  ): Promise<{ analysis: DefectAnalysis; feedback: string | undefined }> {
     let feedback: string | undefined;
 
     while (true) {
@@ -173,9 +175,9 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
       );
 
       const { result: analysis, observation } =
-        await sandboxAgent.analyzeBugActivity(
+        await sandboxAgent.analyzeDefectActivity(
           sandboxState,
-          input.bugDescription,
+          input.defectDescription,
           feedback
         );
 
@@ -200,11 +202,11 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
   }
 
   async function implementLoop(
-    input: FixBugInput,
+    input: ResolveDefectInput,
     sandboxState: SandboxState,
-    analysis: BugAnalysis,
+    analysis: DefectAnalysis,
     initialFeedback: string | undefined
-  ): Promise<FixResult> {
+  ): Promise<ResolutionResult> {
     let feedback = initialFeedback;
 
     while (true) {
@@ -222,10 +224,10 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
         { stage: 'implement', status: 'running' }
       );
 
-      const { result: fix, observation } =
-        await sandboxAgent.implementFixActivity(
+      const { result: resolution, observation } =
+        await sandboxAgent.implementResolutionActivity(
           sandboxState,
-          input.bugDescription,
+          input.defectDescription,
           analysis,
           feedback
         );
@@ -238,18 +240,18 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
       );
 
       await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
-        fix,
-        diff: fix.diff,
-        changes: fix.changes,
-        reviewNotes: fix.reviewNotes,
-        testsPassed: fix.testsPassed,
-        testOutput: fix.testOutput,
+        resolution,
+        diff: resolution.diff,
+        changes: resolution.changes,
+        reviewNotes: resolution.reviewNotes,
+        testsPassed: resolution.testsPassed,
+        testOutput: resolution.testOutput,
       });
       await resetAndWaitForReview();
       const decision = consumeReview();
 
       if (decision.action === 'approve') {
-        return fix;
+        return resolution;
       }
       feedback = decision.feedback;
       await main.updateTaskStatusActivity(input.taskId, 'RUNNING');

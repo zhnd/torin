@@ -15,12 +15,12 @@ Temporal workflow definitions, activities, and client utilities.
 src/
   workflows/
     analyze-repository.ts   # Orchestrates: create sandbox → analyze → destroy
-    fix-bug.ts              # Orchestrates: analyze → HITL → implement → PR
+    resolve-defect.ts       # Orchestrates: analyze → HITL → implement → PR
   activities/
     create-sandbox.ts       # Create Docker sandbox, clone repo
     analyze-code.ts         # Agent-driven repository analysis
-    analyze-bug.ts          # Agent-driven bug analysis
-    implement-fix.ts        # Agent-driven fix implementation
+    analyze-defect.ts       # Agent-driven defect analysis
+    implement-resolution.ts # Agent-driven resolution implementation
     destroy-sandbox.ts      # Cleanup container
     push-branch.ts          # git push from sandbox
     create-pull-request.ts  # Open PR via GitHub API

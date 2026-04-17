@@ -1,31 +1,31 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { BugAnalysis } from '@torin/domain';
+import type { DefectAnalysis } from '@torin/domain';
 import type { Sandbox } from '@torin/sandbox';
 import { log } from './logger.js';
 import type { AgentObserver } from './observer.js';
 import {
-  ANALYZE_BUG_SYSTEM_PROMPT,
-  buildAnalyzeBugUserPrompt,
-} from './prompts/analyze-bug.js';
+  ANALYZE_DEFECT_SYSTEM_PROMPT,
+  buildAnalyzeDefectUserPrompt,
+} from './prompts/analyze-defect.js';
 import { createSandboxMcpServer } from './tools/sandbox-tools.js';
 
-export async function analyzeBug(
+export async function analyzeDefect(
   sandbox: Sandbox,
-  bugDescription: string,
+  defectDescription: string,
   feedback?: string,
   observer?: AgentObserver
-): Promise<BugAnalysis> {
+): Promise<DefectAnalysis> {
   const sandboxServer = createSandboxMcpServer(sandbox);
 
   let lastResult: string | undefined;
 
   const model = process.env.AGENT_MODEL ?? 'claude-sonnet-4-6';
-  log.info({ model, hasFeedback: !!feedback }, 'Starting bug analysis');
+  log.info({ model, hasFeedback: !!feedback }, 'Starting defect analysis');
 
   for await (const message of query({
-    prompt: buildAnalyzeBugUserPrompt(bugDescription, feedback),
+    prompt: buildAnalyzeDefectUserPrompt(defectDescription, feedback),
     options: {
-      systemPrompt: ANALYZE_BUG_SYSTEM_PROMPT,
+      systemPrompt: ANALYZE_DEFECT_SYSTEM_PROMPT,
       model,
       mcpServers: { sandbox: sandboxServer },
       allowedTools: [
@@ -52,7 +52,7 @@ export async function analyzeBug(
     }
   }
 
-  log.info({ hasResult: !!lastResult }, 'Bug analysis query finished');
+  log.info({ hasResult: !!lastResult }, 'Defect analysis query finished');
 
   if (!lastResult) {
     throw new Error('Agent did not return a result');
@@ -65,10 +65,10 @@ export async function analyzeBug(
     );
   }
 
-  const parsed = JSON.parse(jsonMatch[0]) as BugAnalysis;
+  const parsed = JSON.parse(jsonMatch[0]) as DefectAnalysis;
   log.info(
     { rootCause: parsed.rootCause.slice(0, 100), files: parsed.affectedFiles },
-    'Bug analysis complete'
+    'Defect analysis complete'
   );
   return parsed;
 }

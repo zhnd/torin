@@ -1,21 +1,21 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { BugAnalysis, FixResult } from '@torin/domain';
+import type { DefectAnalysis, ResolutionResult } from '@torin/domain';
 import type { Sandbox } from '@torin/sandbox';
 import { log } from './logger.js';
 import type { AgentObserver } from './observer.js';
 import {
-  buildImplementFixUserPrompt,
-  IMPLEMENT_FIX_SYSTEM_PROMPT,
-} from './prompts/implement-fix.js';
+  buildImplementResolutionUserPrompt,
+  IMPLEMENT_RESOLUTION_SYSTEM_PROMPT,
+} from './prompts/implement-resolution.js';
 import { createSandboxMcpServer } from './tools/sandbox-tools.js';
 
-export async function implementFix(
+export async function implementResolution(
   sandbox: Sandbox,
-  bugDescription: string,
-  analysis: BugAnalysis,
+  defectDescription: string,
+  analysis: DefectAnalysis,
   userFeedback?: string,
   observer?: AgentObserver
-): Promise<FixResult> {
+): Promise<ResolutionResult> {
   const sandboxServer = createSandboxMcpServer(sandbox);
 
   let lastResult: string | undefined;
@@ -23,13 +23,17 @@ export async function implementFix(
   const model = process.env.AGENT_MODEL ?? 'claude-sonnet-4-6';
   log.info(
     { model, hasUserFeedback: !!userFeedback },
-    'Starting fix implementation'
+    'Starting resolution implementation'
   );
 
   for await (const message of query({
-    prompt: buildImplementFixUserPrompt(bugDescription, analysis, userFeedback),
+    prompt: buildImplementResolutionUserPrompt(
+      defectDescription,
+      analysis,
+      userFeedback
+    ),
     options: {
-      systemPrompt: IMPLEMENT_FIX_SYSTEM_PROMPT,
+      systemPrompt: IMPLEMENT_RESOLUTION_SYSTEM_PROMPT,
       model,
       mcpServers: { sandbox: sandboxServer },
       allowedTools: [
@@ -57,7 +61,10 @@ export async function implementFix(
     }
   }
 
-  log.info({ hasResult: !!lastResult }, 'Fix implementation query finished');
+  log.info(
+    { hasResult: !!lastResult },
+    'Resolution implementation query finished'
+  );
 
   if (!lastResult) {
     throw new Error('Agent did not return a result');
@@ -70,14 +77,14 @@ export async function implementFix(
     );
   }
 
-  const parsed = JSON.parse(jsonMatch[0]) as FixResult;
+  const parsed = JSON.parse(jsonMatch[0]) as ResolutionResult;
   log.info(
     {
       branch: parsed.branch,
       filesChanged: parsed.filesChanged,
       testsPassed: parsed.testsPassed,
     },
-    'Fix implementation complete'
+    'Resolution implementation complete'
   );
   return parsed;
 }
