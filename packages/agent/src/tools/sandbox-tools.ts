@@ -6,18 +6,40 @@ export function createSandboxMcpServer(sandbox: Sandbox) {
   const bash = tool(
     'bash',
     'Execute a shell command in the sandbox repository. Use for exploring files, running scripts, checking dependencies, etc.',
-    { command: z.string().describe('The shell command to execute') },
+    {
+      command: z.string().describe('The shell command to execute'),
+      cwd: z
+        .string()
+        .optional()
+        .describe(
+          'Optional working directory (absolute path or relative to repo root). Defaults to the repo root.'
+        ),
+      timeoutMs: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Optional command timeout in milliseconds (default 60000).'),
+    },
     async (args) => {
-      const result = await sandbox.executeCommand(args.command);
+      const result = await sandbox.exec(args.command, {
+        cwd: args.cwd,
+        timeoutMs: args.timeoutMs,
+      });
       const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      const trailer = result.truncated
+        ? '\n\n[output truncated]'
+        : result.exitCode === null
+          ? `\n\n[no exit code — ${result.stderr ? 'see stderr' : 'process did not complete'}]`
+          : '';
       return {
         content: [
           {
             type: 'text' as const,
-            text: output || '(no output)',
+            text: (output || '(no output)') + trailer,
           },
         ],
-        isError: result.exitCode !== 0,
+        isError: !result.success,
       };
     }
   );
@@ -45,9 +67,18 @@ export function createSandboxMcpServer(sandbox: Sandbox) {
         .describe('Directory path relative to repo root. Use "." for root.'),
     },
     async (args) => {
-      const files = await sandbox.listFiles(args.path);
+      const result = await sandbox.exec(
+        `find ${shellArg(args.path)} -maxdepth 3 -type f`,
+        { timeoutMs: 15_000 }
+      );
       return {
-        content: [{ type: 'text' as const, text: files.join('\n') }],
+        content: [
+          {
+            type: 'text' as const,
+            text: result.stdout.trim() || '(no files)',
+          },
+        ],
+        isError: !result.success,
       };
     }
   );
@@ -72,4 +103,8 @@ export function createSandboxMcpServer(sandbox: Sandbox) {
     version: '1.0.0',
     tools: [bash, readFile, listFiles, writeFile],
   });
+}
+
+function shellArg(input: string): string {
+  return `'${input.replace(/'/g, `'\\''`)}'`;
 }

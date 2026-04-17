@@ -1,24 +1,61 @@
 import { fileURLToPath } from 'node:url';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { TASK_QUEUE } from '@torin/workflow';
+import { cleanupOrphanBuilders, pruneStaleImages } from '@torin/sandbox';
+import { SANDBOX_TASK_QUEUE, TASK_QUEUE } from '@torin/workflow';
 import * as activities from '@torin/workflow/activities';
 import { log } from './logger.js';
+
+const SANDBOX_CONCURRENCY = parseIntEnv('SANDBOX_CONCURRENCY', 4);
+const MAIN_CONCURRENCY = parseIntEnv('WORKER_CONCURRENCY', 40);
+const PRUNE_INTERVAL_MS = parseIntEnv(
+  'TORIN_IMAGE_PRUNE_INTERVAL_MS',
+  24 * 60 * 60 * 1000
+);
 
 log.info(
   {
     databaseUrl: process.env.DATABASE_URL ? 'set' : 'NOT SET',
     temporalAddress: process.env.TEMPORAL_ADDRESS ?? 'localhost:7233 (default)',
     activities: Object.keys(activities),
+    mainConcurrency: MAIN_CONCURRENCY,
+    sandboxConcurrency: SANDBOX_CONCURRENCY,
   },
   'Worker starting'
 );
 
 async function main() {
+  // Clean up any builder containers left over from a previous crash before
+  // opening for business — otherwise they'd slowly pile up.
+  try {
+    await cleanupOrphanBuilders();
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'Orphan builder cleanup failed'
+    );
+  }
+
+  const pruneTimer = setInterval(async () => {
+    try {
+      const result = await pruneStaleImages();
+      if (result.deleted.length) {
+        log.info({ deleted: result.deleted }, 'Pruned stale repo images');
+      }
+    } catch (err) {
+      log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'Image prune failed'
+      );
+    }
+  }, PRUNE_INTERVAL_MS);
+  pruneTimer.unref();
+
   const connection = await NativeConnection.connect({
     address: process.env.TEMPORAL_ADDRESS ?? 'localhost:7233',
   });
 
-  const worker = await Worker.create({
+  // Main worker: workflows + lightweight activities (DB / GitHub API).
+  const mainWorker = await Worker.create({
     connection,
     namespace: 'default',
     taskQueue: TASK_QUEUE,
@@ -26,10 +63,37 @@ async function main() {
       import.meta.resolve('@torin/workflow/workflows')
     ),
     activities,
+    maxConcurrentActivityTaskExecutions: MAIN_CONCURRENCY,
+    maxConcurrentWorkflowTaskExecutions: MAIN_CONCURRENCY,
   });
 
-  log.info({ taskQueue: TASK_QUEUE }, 'Worker started, listening');
-  await worker.run();
+  // Sandbox worker: container-touching activities only. SANDBOX_CONCURRENCY
+  // caps concurrent Docker work so the host stays healthy; overflow queues
+  // at the Temporal server until a slot frees.
+  const sandboxWorker = await Worker.create({
+    connection,
+    namespace: 'default',
+    taskQueue: SANDBOX_TASK_QUEUE,
+    activities,
+    maxConcurrentActivityTaskExecutions: SANDBOX_CONCURRENCY,
+  });
+
+  log.info(
+    {
+      mainQueue: TASK_QUEUE,
+      sandboxQueue: SANDBOX_TASK_QUEUE,
+    },
+    'Workers started, listening'
+  );
+
+  await Promise.all([mainWorker.run(), sandboxWorker.run()]);
+}
+
+function parseIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 main().catch((err) => {

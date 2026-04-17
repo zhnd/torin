@@ -1,27 +1,32 @@
 import { proxyActivities } from '@temporalio/workflow';
 import type { AnalyzeRepositoryInput } from '@torin/domain';
+import type { SandboxState } from '@torin/sandbox';
 import type * as activities from '../activities/index.js';
+import { SANDBOX_TASK_QUEUE } from '../client/index.js';
 
-const shortActivities = proxyActivities<typeof activities>({
+const main = proxyActivities<typeof activities>({
   startToCloseTimeout: '2 minutes',
   retry: { maximumAttempts: 2 },
 });
 
-const longActivities = proxyActivities<typeof activities>({
-  startToCloseTimeout: '10 minutes',
+const sandboxInfra = proxyActivities<typeof activities>({
+  taskQueue: SANDBOX_TASK_QUEUE,
+  startToCloseTimeout: '5 minutes',
   retry: { maximumAttempts: 2 },
 });
 
-const infraActivities = proxyActivities<typeof activities>({
-  startToCloseTimeout: '5 minutes',
+const sandboxAgent = proxyActivities<typeof activities>({
+  taskQueue: SANDBOX_TASK_QUEUE,
+  startToCloseTimeout: '10 minutes',
+  retry: { maximumAttempts: 2 },
 });
 
 export async function analyzeRepositoryWorkflow(
   input: AnalyzeRepositoryInput
 ): Promise<void> {
-  await shortActivities.updateTaskStatusActivity(input.taskId, 'RUNNING');
+  await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
 
-  await shortActivities.saveTaskEventsActivity(
+  await main.saveTaskEventsActivity(
     input.taskId,
     [
       {
@@ -35,38 +40,34 @@ export async function analyzeRepositoryWorkflow(
     { stage: 'analysis', status: 'running' }
   );
 
-  let sandboxId: string | undefined;
+  let sandboxState: SandboxState | undefined;
   try {
-    sandboxId = await infraActivities.createSandboxActivity(
+    sandboxState = await sandboxInfra.createSandboxActivity(
       input.repositoryUrl
     );
 
     const { result, observation } =
-      await longActivities.analyzeCodeActivity(sandboxId);
+      await sandboxAgent.analyzeCodeActivity(sandboxState);
 
-    await shortActivities.saveTaskEventsActivity(
+    await main.saveTaskEventsActivity(
       input.taskId,
       observation.events,
       observation.cost,
       { stage: 'analysis', status: 'completed' }
     );
 
-    await shortActivities.updateTaskStatusActivity(
-      input.taskId,
-      'COMPLETED',
-      result
-    );
+    await main.updateTaskStatusActivity(input.taskId, 'COMPLETED', result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await shortActivities.updateTaskStatusActivity(
+    await main.updateTaskStatusActivity(
       input.taskId,
       'FAILED',
       undefined,
       message
     );
   } finally {
-    if (sandboxId) {
-      await infraActivities.destroySandboxActivity(sandboxId);
+    if (sandboxState) {
+      await sandboxInfra.destroySandboxActivity(sandboxState);
     }
   }
 }

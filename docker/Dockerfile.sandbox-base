@@ -1,0 +1,35 @@
+# Torin sandbox base image.
+#
+# Deliberately minimal: no language runtimes are installed. Every repo
+# declares (or we auto-detect) its own toolchain, and mise pulls the right
+# versions into torin/repo:<key> at build time. Keeping this image lean
+# (~200MB) keeps the first-ever pull fast and avoids security surface for
+# languages a given deployment never uses.
+
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends \
+        git \
+        curl \
+        ca-certificates \
+        jq \
+        ripgrep \
+        build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# mise (https://mise.jdx.dev) — polyglot version manager. Installed globally
+# so every shell in the container sees it on PATH.
+RUN curl -fsSL https://mise.run | sh && \
+    mv /root/.local/bin/mise /usr/local/bin/mise && \
+    mise --version
+
+ENV MISE_DATA_DIR=/root/.local/share/mise \
+    MISE_CACHE_DIR=/root/.cache/mise \
+    PATH=/root/.local/share/mise/shims:/root/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+WORKDIR /workspace/repo
+
+CMD ["sleep", "infinity"]

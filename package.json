@@ -15,7 +15,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "docker:up": "docker-compose up -d",
     "docker:up:dev": "docker-compose up -d postgres temporal-postgres temporal temporal-ui",
-    "docker:down": "docker-compose down"
+    "docker:down": "docker-compose down",
+    "sandbox:build-base": "bash scripts/build-sandbox-base.sh"
   },
   "engines": {
     "node": ">=24.14.1",

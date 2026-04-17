@@ -1,16 +1,16 @@
 import { createObserver, implementFix } from '@torin/agent';
 import type { AgentObservation, BugAnalysis, FixResult } from '@torin/domain';
-import { connectDockerSandbox } from '@torin/sandbox';
+import { connectSandbox, type SandboxState } from '@torin/sandbox';
 import { log } from '../logger.js';
 
 export async function implementFixActivity(
-  sandboxId: string,
+  state: SandboxState,
   bugDescription: string,
   analysis: BugAnalysis,
   userFeedback?: string
 ): Promise<{ result: FixResult; observation: AgentObservation }> {
-  log.info({ sandboxId }, 'Starting fix implementation activity');
-  const sandbox = await connectDockerSandbox(sandboxId);
+  log.info('Starting fix implementation activity');
+  const sandbox = await connectSandbox(state);
   const observer = createObserver('implement', 'implementFix');
   const result = await implementFix(
     sandbox,

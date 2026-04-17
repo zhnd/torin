@@ -1,9 +1,15 @@
-import { connectDockerSandbox } from '@torin/sandbox';
+import { connectSandbox, type SandboxState } from '@torin/sandbox';
 import { log } from '../logger.js';
 
-export async function destroySandboxActivity(sandboxId: string): Promise<void> {
-  log.info({ sandboxId }, 'Destroying sandbox');
-  const sandbox = await connectDockerSandbox(sandboxId);
-  await sandbox.destroy();
-  log.info({ sandboxId }, 'Sandbox destroyed');
+export async function destroySandboxActivity(
+  state: SandboxState
+): Promise<void> {
+  log.info({ containerId: getContainerId(state) }, 'Destroying sandbox');
+  const sandbox = await connectSandbox(state);
+  await sandbox.stop();
+  log.info({ containerId: getContainerId(state) }, 'Sandbox destroyed');
+}
+
+function getContainerId(state: SandboxState): string {
+  return state.provider === 'docker' ? state.containerId : 'unknown';
 }

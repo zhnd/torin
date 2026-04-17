@@ -12,6 +12,7 @@
     "@temporalio/worker": "^1.15.0",
     "@torin/agent": "workspace:*",
     "@torin/domain": "workspace:*",
+    "@torin/sandbox": "workspace:*",
     "@torin/shared": "workspace:*",
     "@torin/workflow": "workspace:*"
   },

@@ -10,23 +10,31 @@ import type {
   FixResult,
   ReviewDecision,
 } from '@torin/domain';
+import type { SandboxState } from '@torin/sandbox';
 import type * as activities from '../activities/index.js';
+import { SANDBOX_TASK_QUEUE } from '../client/index.js';
 import { buildPrBody } from '../utils/build-pr-body.js';
 
-// ── Activity proxies (grouped by timeout profile) ───────
+// ── Activity proxies ─────────────────────────────────────
+// Main queue: DB / GitHub API — unbounded concurrency.
+// Sandbox queue: everything that touches a Docker container — concurrency
+// capped by SANDBOX_CONCURRENCY at the worker.
 
-const shortActivities = proxyActivities<typeof activities>({
+const main = proxyActivities<typeof activities>({
   startToCloseTimeout: '2 minutes',
   retry: { maximumAttempts: 2 },
 });
 
-const longActivities = proxyActivities<typeof activities>({
-  startToCloseTimeout: '15 minutes',
+const sandboxInfra = proxyActivities<typeof activities>({
+  taskQueue: SANDBOX_TASK_QUEUE,
+  startToCloseTimeout: '5 minutes',
   retry: { maximumAttempts: 2 },
 });
 
-const infraActivities = proxyActivities<typeof activities>({
-  startToCloseTimeout: '5 minutes',
+const sandboxAgent = proxyActivities<typeof activities>({
+  taskQueue: SANDBOX_TASK_QUEUE,
+  startToCloseTimeout: '15 minutes',
+  retry: { maximumAttempts: 2 },
 });
 
 // ── Signal ──────────────────────────────────────────────
@@ -50,32 +58,32 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
     return reviewResult as unknown as ReviewDecision;
   }
 
-  await shortActivities.updateTaskStatusActivity(input.taskId, 'RUNNING');
+  await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
 
-  let sandboxId: string | undefined;
+  let sandboxState: SandboxState | undefined;
   try {
-    sandboxId = await infraActivities.createSandboxActivity(
+    sandboxState = await sandboxInfra.createSandboxActivity(
       input.repositoryUrl,
-      { projectId: input.projectId, fullClone: true }
+      { projectId: input.projectId }
     );
 
     // ── Phase 1: Analyze → Review loop ──
     const { analysis, feedback: approvalFeedback } = await analyzeLoop(
       input,
-      sandboxId
+      sandboxState
     );
 
     // ── Phase 2: Implement → Diff review loop ──
-    await shortActivities.updateTaskStatusActivity(input.taskId, 'RUNNING');
+    await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
     const fix = await implementLoop(
       input,
-      sandboxId,
+      sandboxState,
       analysis,
       approvalFeedback
     );
 
     // ── Phase 3: Push + PR ──
-    await shortActivities.saveTaskEventsActivity(
+    await main.saveTaskEventsActivity(
       input.taskId,
       [
         {
@@ -89,9 +97,11 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
       { stage: 'pr', status: 'running' }
     );
 
-    await shortActivities.pushBranchActivity(sandboxId, fix.branch);
+    await sandboxInfra.pushBranchActivity(sandboxState, fix.branch, {
+      projectId: input.projectId,
+    });
 
-    const prResult = await shortActivities.createPullRequestActivity(
+    const prResult = await main.createPullRequestActivity(
       input.projectId,
       fix.branch,
       fix.baseBranch,
@@ -100,14 +110,14 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
     );
 
     if (fix.changes?.length > 0) {
-      await shortActivities.addPrReviewCommentsActivity(
+      await main.addPrReviewCommentsActivity(
         input.projectId,
         prResult.number,
         fix.changes
       );
     }
 
-    await shortActivities.saveTaskEventsActivity(
+    await main.saveTaskEventsActivity(
       input.taskId,
       [
         {
@@ -121,21 +131,21 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
       { stage: 'pr', status: 'completed' }
     );
 
-    await shortActivities.updateTaskStatusActivity(input.taskId, 'COMPLETED', {
+    await main.updateTaskStatusActivity(input.taskId, 'COMPLETED', {
       fix,
       pullRequest: prResult,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await shortActivities.updateTaskStatusActivity(
+    await main.updateTaskStatusActivity(
       input.taskId,
       'FAILED',
       undefined,
       message
     );
   } finally {
-    if (sandboxId) {
-      await infraActivities.destroySandboxActivity(sandboxId);
+    if (sandboxState) {
+      await sandboxInfra.destroySandboxActivity(sandboxState);
     }
   }
 
@@ -143,12 +153,12 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
 
   async function analyzeLoop(
     input: FixBugInput,
-    sandboxId: string
+    sandboxState: SandboxState
   ): Promise<{ analysis: BugAnalysis; feedback: string | undefined }> {
     let feedback: string | undefined;
 
     while (true) {
-      await shortActivities.saveTaskEventsActivity(
+      await main.saveTaskEventsActivity(
         input.taskId,
         [
           {
@@ -163,24 +173,22 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
       );
 
       const { result: analysis, observation } =
-        await longActivities.analyzeBugActivity(
-          sandboxId,
+        await sandboxAgent.analyzeBugActivity(
+          sandboxState,
           input.bugDescription,
           feedback
         );
 
-      await shortActivities.saveTaskEventsActivity(
+      await main.saveTaskEventsActivity(
         input.taskId,
         observation.events,
         observation.cost,
         { stage: 'analysis', status: 'completed' }
       );
 
-      await shortActivities.updateTaskStatusActivity(
-        input.taskId,
-        'AWAITING_REVIEW',
-        { analysis }
-      );
+      await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
+        analysis,
+      });
       await resetAndWaitForReview();
       const decision = consumeReview();
 
@@ -193,14 +201,14 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
 
   async function implementLoop(
     input: FixBugInput,
-    sandboxId: string,
+    sandboxState: SandboxState,
     analysis: BugAnalysis,
     initialFeedback: string | undefined
   ): Promise<FixResult> {
     let feedback = initialFeedback;
 
     while (true) {
-      await shortActivities.saveTaskEventsActivity(
+      await main.saveTaskEventsActivity(
         input.taskId,
         [
           {
@@ -215,32 +223,28 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
       );
 
       const { result: fix, observation } =
-        await longActivities.implementFixActivity(
-          sandboxId,
+        await sandboxAgent.implementFixActivity(
+          sandboxState,
           input.bugDescription,
           analysis,
           feedback
         );
 
-      await shortActivities.saveTaskEventsActivity(
+      await main.saveTaskEventsActivity(
         input.taskId,
         observation.events,
         observation.cost,
         { stage: 'implement', status: 'completed' }
       );
 
-      await shortActivities.updateTaskStatusActivity(
-        input.taskId,
-        'AWAITING_REVIEW',
-        {
-          fix,
-          diff: fix.diff,
-          changes: fix.changes,
-          reviewNotes: fix.reviewNotes,
-          testsPassed: fix.testsPassed,
-          testOutput: fix.testOutput,
-        }
-      );
+      await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
+        fix,
+        diff: fix.diff,
+        changes: fix.changes,
+        reviewNotes: fix.reviewNotes,
+        testsPassed: fix.testsPassed,
+        testOutput: fix.testOutput,
+      });
       await resetAndWaitForReview();
       const decision = consumeReview();
 
@@ -248,7 +252,7 @@ export async function fixBugWorkflow(input: FixBugInput): Promise<void> {
         return fix;
       }
       feedback = decision.feedback;
-      await shortActivities.updateTaskStatusActivity(input.taskId, 'RUNNING');
+      await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
     }
   }
 }
