@@ -2,7 +2,7 @@ import { proxyActivities } from '@temporalio/workflow';
 import type { AnalyzeRepositoryInput } from '@torin/domain';
 import type { SandboxState } from '@torin/sandbox';
 import type * as activities from '../activities/index.js';
-import { SANDBOX_TASK_QUEUE } from '../client/index.js';
+import { SANDBOX_TASK_QUEUE } from '../task-queues.js';
 
 const main = proxyActivities<typeof activities>({
   startToCloseTimeout: '2 minutes',

@@ -1,18 +1,10 @@
 import { Client, Connection } from '@temporalio/client';
 
-/**
- * Main task queue — carries workflow execution and lightweight activities
- * (DB updates, GitHub API calls). Concurrency is cheap here.
- */
-export const TASK_QUEUE = 'torin-main';
-
-/**
- * Sandbox task queue — carries every activity that touches a Docker
- * container (create/destroy, agent runs, git push). Worker concurrency on
- * this queue is gated by SANDBOX_CONCURRENCY to protect host resources and
- * stay under model-API rate limits. Workflows themselves do NOT run here.
- */
-export const SANDBOX_TASK_QUEUE = 'torin-sandbox-heavy';
+// Re-export so external callers (server / CLI) can still do
+// `import { TASK_QUEUE } from '@torin/workflow'`. The actual definitions
+// live in ../task-queues.ts so workflows can import them without pulling
+// in @temporalio/client (which is disallowed in the workflow sandbox).
+export { SANDBOX_TASK_QUEUE, TASK_QUEUE } from '../task-queues.js';
 
 export async function createTemporalClient(): Promise<Client> {
   const connection = await Connection.connect({

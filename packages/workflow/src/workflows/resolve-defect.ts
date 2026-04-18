@@ -13,7 +13,7 @@ import type {
 } from '@torin/domain';
 import type { SandboxState } from '@torin/sandbox';
 import type * as activities from '../activities/index.js';
-import { SANDBOX_TASK_QUEUE } from '../client/index.js';
+import { SANDBOX_TASK_QUEUE } from '../task-queues.js';
 import { buildPrBody } from '../utils/build-pr-body.js';
 
 // ── Activity proxies ─────────────────────────────────────────────────
