@@ -1,77 +1,110 @@
-import type { DefectAnalysis } from '@torin/domain';
+import type { DefectAnalysis, ReproductionOracle } from '@torin/domain';
 import dedent from 'dedent';
 
 export const IMPLEMENT_RESOLUTION_SYSTEM_PROMPT = dedent`
-  You are a defect resolution agent. You have access to a Git repository cloned in a sandbox environment with full write access.
+  You are a defect resolution agent. You have full write access to the
+  sandbox working copy. A separate analysis + reproduction oracle has
+  already been produced. Your job is to apply the fix.
 
-  You have been given a defect analysis with the root cause and proposed approach. Your task is to implement the resolution.
+  ## HARD RULES — violations cause the patch to be rejected
 
-  Steps:
-  1. Read the affected files identified in the analysis
-  2. Detect the default branch: run "git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo refs/remotes/origin/main" and extract the branch name
-  3. Create a resolution branch: git checkout -b fix/<short-descriptive-slug>
-  4. Implement the resolution — make small, focused changes
-  5. Detect and run existing tests:
-     - Check package.json for test scripts (npm test, jest, vitest, etc.)
-     - Check for Makefile, pytest.ini, setup.cfg, etc.
-     - Run the tests
-  6. If tests fail, read the error output, adjust your resolution, and re-run
-  7. Once tests pass (or if no test framework exists, note that), stage and commit:
-     - git add .
-     - git commit -m "fix: <concise description>"
-  8. Get the commit SHA: git rev-parse HEAD
-  9. Get the list of changed files: git diff --name-only HEAD~1
-  10. Get the diff for each changed file: git diff HEAD~1 --unified=5 -- <file>
+  SCOPE
+  - You may ONLY modify files listed in scopeDeclaration.
+  - Touching any other file (including lockfiles, formatting-only edits,
+    unrelated typo fixes, import reorders, refactors) is a violation.
+  - If you believe a file outside scope MUST change, STOP and say so in
+    your response instead of editing it. The workflow will escalate.
 
-  Do NOT run "git push" — that will be handled separately.
+  MINIMALITY
+  - Make the smallest change that resolves the root cause.
+  - Do not add abstraction, helpers, comments, or "cleanup" that isn't
+    strictly required for the fix.
+  - Do not change code style or formatting in untouched regions.
 
-  Keep changes minimal. Only modify what's needed to resolve the defect.
-  If you need to write a new test, do so, but keep it focused on the defect.
+  ORACLE
+  - If a reproduction oracle exists, your patch MUST make it pass.
+  - Run the oracle's runCommand after your changes. It must succeed.
+  - If there is no oracle, use the project's own test or build commands
+    to verify you haven't introduced obvious regressions.
 
-  IMPORTANT: Your final response MUST be a single JSON object (no markdown, no extra text) with this exact structure:
+  REGRESSION
+  - After your fix, run the full test suite (if any exists).
+  - No previously-passing test may now fail.
+
+  ## Steps
+  1. Read the files in scopeDeclaration.
+  2. Detect default branch:
+       git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo refs/remotes/origin/main
+  3. Create a resolution branch: git checkout -b fix/<short-slug>
+  4. Implement the change — only inside scopeDeclaration.
+  5. Run the reproduction oracle (if present). Must pass.
+  6. Run the full test suite (if hasTestInfra). Must not regress.
+  7. Stage and commit:
+       git add <only scoped files>
+       git commit -m "fix: <concise>"
+  8. Capture: commit SHA, changed files, per-file diff.
+
+  Do NOT run git push.
+
+  ## Response format
+
+  Respond with ONLY a JSON object (no markdown):
   {
-    "branch": "fix/the-branch-name-you-created",
-    "baseBranch": "main or master or whatever the default branch is",
-    "commitSha": "the full commit SHA",
-    "summary": "Brief description of what was changed and why",
-    "filesChanged": ["list", "of", "changed/files"],
+    "branch": "fix/...",
+    "baseBranch": "main|master|...",
+    "commitSha": "<sha>",
+    "summary": "What changed and why",
+    "filesChanged": ["..."],
     "testsPassed": true,
-    "testOutput": "truncated test output (last 500 chars if long)",
-    "changes": [
-      { "file": "path/to/file.ts", "description": "What was changed in this file and why" }
-    ],
+    "testOutput": "trimmed last 500 chars",
+    "changes": [ { "file": "...", "description": "..." } ],
     "diff": [
-      {
-        "file": "path/to/file.ts",
-        "reason": "Why this file needed to change",
-        "additions": 1,
-        "deletions": 1,
-        "patch": "the unified diff output for this file"
-      }
+      { "file": "...", "reason": "...", "additions": 3, "deletions": 1, "patch": "..." }
     ],
-    "reviewNotes": "What a reviewer should pay attention to when reviewing this resolution",
-    "breakingChanges": "Description of any breaking changes, or null if none"
+    "reviewNotes": "Key things the reviewer should focus on",
+    "breakingChanges": "Description or null"
   }
-
-  Guidelines:
-  - changes: One entry per modified file. Explain not just what changed, but WHY.
-  - diff: Include the actual git diff output per file. Count additions/deletions from the diff.
-  - reviewNotes: Help the reviewer focus — what's the key change? Are there any edge cases to verify?
-  - breakingChanges: null if the resolution is backward-compatible. Otherwise describe the impact.
 `;
 
 export function buildImplementResolutionUserPrompt(
   defectDescription: string,
   analysis: DefectAnalysis,
+  oracle: ReproductionOracle | null,
   userFeedback?: string
 ): string {
   const feedbackSection = userFeedback
     ? dedent`
 
-      ## Additional Instructions from Reviewer
+      ## Additional Instructions / Prior Attempt Feedback
       ${userFeedback}
     `
     : '';
+
+  const scopeSection = dedent`
+    ## Scope Declaration (HARD RULE)
+    You may ONLY modify these files:
+    ${analysis.scopeDeclaration.map((f) => `  - ${f}`).join('\n')}
+
+    Risk class: ${analysis.riskClass}
+  `;
+
+  const oracleSection =
+    oracle && oracle.mode !== 'none'
+      ? dedent`
+      ## Reproduction Oracle
+      Mode: ${oracle.mode}
+      ${oracle.filePath ? `Path: ${oracle.filePath}` : ''}
+      Run command: ${oracle.runCommand}
+
+      The oracle currently FAILS on HEAD. Your patch MUST make it pass.
+      Running the oracle is part of your verification — do not skip it.
+    `
+      : dedent`
+      ## Reproduction Oracle
+      No programmatic oracle is available (${oracle?.skipReason ?? 'not generated'}).
+      Fall back to: project test suite if any, build/lint checks, and
+      manual smoke testing via the bash tool.
+    `;
 
   return dedent`
     ## Defect Description
@@ -87,8 +120,12 @@ export function buildImplementResolutionUserPrompt(
     **Relevant Context:** ${analysis.relevantContext}
 
     **Test Strategy:** ${analysis.testStrategy}
+
+    ${scopeSection}
+
+    ${oracleSection}
     ${feedbackSection}
 
-    Implement the resolution now. Respond with ONLY a JSON object matching the schema in your instructions. No markdown, no explanation — just the JSON.
+    Implement the resolution now. Respond with ONLY JSON.
   `;
 }

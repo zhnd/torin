@@ -9,14 +9,16 @@ import type { StageDetail } from '../../types';
 const STAGE_LABELS: Record<TaskStage, string> = {
   analysis: 'Analysis',
   plan: 'Plan',
+  reproduce: 'Repro',
   implement: 'Impl',
+  filter: 'Filter',
   test: 'Test',
   pr: 'PR',
 };
 
 interface StageTrackProps {
-  stages: Record<TaskStage, StageStatus>;
-  stageDetails?: Record<TaskStage, StageDetail>;
+  stages: Partial<Record<TaskStage, StageStatus>>;
+  stageDetails?: Partial<Record<TaskStage, StageDetail>>;
   size?: 'sm' | 'md';
   showLabels?: boolean;
 }
@@ -168,7 +170,7 @@ export function StageTrack({
               <div
                 className={cn(
                   'h-1.5 rounded-full',
-                  segmentClass(stages[stage])
+                  segmentClass(stages[stage] ?? 'pending')
                 )}
               />
               {hoveredStage === stage && stageDetails?.[stage] && (
@@ -184,7 +186,7 @@ export function StageTrack({
                 key={stage}
                 className={cn(
                   'flex-1 text-[10px] leading-none text-center',
-                  segmentLabelClass(stages[stage])
+                  segmentLabelClass(stages[stage] ?? 'pending')
                 )}
               >
                 {STAGE_LABELS[stage]}
@@ -207,12 +209,12 @@ export function StageTrack({
             onMouseEnter={() => stageDetails && setHoveredStage(stage)}
             onMouseLeave={() => setHoveredStage(null)}
           >
-            <div className={dotClass(stages[stage])} />
+            <div className={dotClass(stages[stage] ?? 'pending')} />
             {showLabels && (
               <span
                 className={cn(
                   'text-[10px] leading-none',
-                  labelClass(stages[stage])
+                  labelClass(stages[stage] ?? 'pending')
                 )}
               >
                 {STAGE_LABELS[stage]}
@@ -226,7 +228,7 @@ export function StageTrack({
             <div
               className={cn(
                 'h-[2px] w-4 rounded-full mt-[3px]',
-                lineClass(stages[stage])
+                lineClass(stages[stage] ?? 'pending')
               )}
             />
           )}

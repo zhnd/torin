@@ -52,8 +52,12 @@ export interface Sandbox {
   exec(command: string, options?: ExecOptions): Promise<ExecResult>;
   execDetached?(
     command: string,
-    options?: { cwd?: string; env?: Record<string, string> }
-  ): Promise<{ commandId: string }>;
+    options?: {
+      cwd?: string;
+      env?: Record<string, string>;
+      logFile?: string;
+    }
+  ): Promise<{ commandId: string; logFile: string }>;
 
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;

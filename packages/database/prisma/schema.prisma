@@ -43,6 +43,11 @@ model Project {
   repositoryUrl        String
   authMethod           AuthMethod @default(NONE)
   encryptedCredentials String?
+  // Preview configuration — when set, web fixes start a dev server during
+  // FILTER to catch boot errors and expose a URL for HITL visual review.
+  previewCommand       String?
+  previewPort          Int?
+  previewReadyPattern  String?
   userId               String
   user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks                Task[]

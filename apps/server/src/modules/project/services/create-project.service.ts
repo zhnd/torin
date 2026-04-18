@@ -25,6 +25,11 @@ export class CreateProjectService {
       name: input.name,
       repositoryUrl: input.repositoryUrl,
       user: { connect: { id: user.id } },
+      ...(input.previewCommand ? { previewCommand: input.previewCommand } : {}),
+      ...(input.previewPort != null ? { previewPort: input.previewPort } : {}),
+      ...(input.previewReadyPattern
+        ? { previewReadyPattern: input.previewReadyPattern }
+        : {}),
     };
 
     if (input.credentials) {

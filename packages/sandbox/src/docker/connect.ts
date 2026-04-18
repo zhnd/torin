@@ -25,5 +25,7 @@ export async function connectDockerSandbox(
     githubToken: options.githubToken,
     currentBranch: state.currentBranch,
     hooks: options.hooks,
+    ports: state.ports,
+    portMap: state.portMap,
   });
 }

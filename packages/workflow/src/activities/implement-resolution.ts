@@ -2,6 +2,7 @@ import { createObserver, implementResolution } from '@torin/agent';
 import type {
   AgentObservation,
   DefectAnalysis,
+  ReproductionOracle,
   ResolutionResult,
 } from '@torin/domain';
 import { connectSandbox, type SandboxState } from '@torin/sandbox';
@@ -11,15 +12,24 @@ export async function implementResolutionActivity(
   state: SandboxState,
   defectDescription: string,
   analysis: DefectAnalysis,
+  oracle: ReproductionOracle | null,
   userFeedback?: string
 ): Promise<{ result: ResolutionResult; observation: AgentObservation }> {
-  log.info('Starting resolution implementation activity');
+  log.info(
+    {
+      oracleMode: oracle?.mode,
+      scopeSize: analysis.scopeDeclaration.length,
+      hasFeedback: !!userFeedback,
+    },
+    'Starting resolution implementation activity'
+  );
   const sandbox = await connectSandbox(state);
   const observer = createObserver('implement', 'implementResolution');
   const result = await implementResolution(
     sandbox,
     defectDescription,
     analysis,
+    oracle,
     userFeedback,
     observer
   );

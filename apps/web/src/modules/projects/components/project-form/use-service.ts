@@ -26,6 +26,9 @@ export function useService({
     defaultValues: {
       name: defaultValues?.name ?? '',
       repositoryUrl: defaultValues?.repositoryUrl ?? '',
+      previewCommand: defaultValues?.previewCommand ?? '',
+      previewPort: defaultValues?.previewPort ?? '',
+      previewReadyPattern: defaultValues?.previewReadyPattern ?? '',
     },
   });
 
@@ -36,19 +39,30 @@ export function useService({
   async function onSubmit(values: ProjectFormValues) {
     setError(null);
     try {
-      // Only send credentials if the user actually typed something
       const credentials = values.credentials || undefined;
+      const previewCommand = values.previewCommand?.trim() || undefined;
+      const previewReadyPattern =
+        values.previewReadyPattern?.trim() || undefined;
+      const previewPort = values.previewPort
+        ? Number(values.previewPort)
+        : undefined;
+      const payload = {
+        name: values.name,
+        repositoryUrl: values.repositoryUrl,
+        credentials,
+        previewCommand,
+        previewPort,
+        previewReadyPattern,
+      };
       if (mode === 'create') {
-        const { data } = await createProject({
-          variables: { ...values, credentials },
-        });
+        const { data } = await createProject({ variables: payload });
         if (data?.createProject?.id) {
           toast.success('Project created');
           router.push(`/projects/${data.createProject.id}`);
         }
       } else if (projectId) {
         await updateProject({
-          variables: { id: projectId, ...values, credentials },
+          variables: { id: projectId, ...payload },
         });
         toast.success('Project updated');
       }

@@ -86,6 +86,66 @@ export function ProjectForm({
             )}
           />
 
+          <div className="rounded-md border bg-muted/30 p-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-medium">
+                Preview configuration (optional)
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                When set, defect-resolution tasks will start the dev server
+                during FILTER and expose a preview URL for visual review. Leave
+                blank for non-web projects.
+              </p>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="previewCommand"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Dev server command</FormLabel>
+                  <FormControl>
+                    <Input placeholder="pnpm dev" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="previewPort"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Port</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="3000"
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="previewReadyPattern"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ready log pattern (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="ready in" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
           <Button type="submit" disabled={isLoading}>
             {isLoading
               ? mode === 'create'

@@ -1,5 +1,9 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { DefectAnalysis, ResolutionResult } from '@torin/domain';
+import type {
+  DefectAnalysis,
+  ReproductionOracle,
+  ResolutionResult,
+} from '@torin/domain';
 import type { Sandbox } from '@torin/sandbox';
 import { log } from './logger.js';
 import type { AgentObserver } from './observer.js';
@@ -13,6 +17,7 @@ export async function implementResolution(
   sandbox: Sandbox,
   defectDescription: string,
   analysis: DefectAnalysis,
+  oracle: ReproductionOracle | null,
   userFeedback?: string,
   observer?: AgentObserver
 ): Promise<ResolutionResult> {
@@ -22,7 +27,12 @@ export async function implementResolution(
 
   const model = process.env.AGENT_MODEL ?? 'claude-sonnet-4-6';
   log.info(
-    { model, hasUserFeedback: !!userFeedback },
+    {
+      model,
+      hasUserFeedback: !!userFeedback,
+      oracleMode: oracle?.mode,
+      scope: analysis.scopeDeclaration.length,
+    },
     'Starting resolution implementation'
   );
 
@@ -30,6 +40,7 @@ export async function implementResolution(
     prompt: buildImplementResolutionUserPrompt(
       defectDescription,
       analysis,
+      oracle,
       userFeedback
     ),
     options: {

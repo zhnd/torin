@@ -6,6 +6,7 @@ import {
 } from '@temporalio/workflow';
 import type {
   DefectAnalysis,
+  ReproductionOracle,
   ResolutionResult,
   ResolveDefectInput,
   ReviewDecision,
@@ -15,10 +16,10 @@ import type * as activities from '../activities/index.js';
 import { SANDBOX_TASK_QUEUE } from '../client/index.js';
 import { buildPrBody } from '../utils/build-pr-body.js';
 
-// ── Activity proxies ─────────────────────────────────────
-// Main queue: DB / GitHub API — unbounded concurrency.
-// Sandbox queue: everything that touches a Docker container — concurrency
-// capped by SANDBOX_CONCURRENCY at the worker.
+// ── Activity proxies ─────────────────────────────────────────────────
+// main         — DB / GitHub API; high concurrency
+// sandboxInfra — sandbox create / destroy / push / filter; 5 min cap
+// sandboxAgent — agent-driven stages (analyze / reproduce / implement); 15 min cap
 
 const main = proxyActivities<typeof activities>({
   startToCloseTimeout: '2 minutes',
@@ -27,21 +28,27 @@ const main = proxyActivities<typeof activities>({
 
 const sandboxInfra = proxyActivities<typeof activities>({
   taskQueue: SANDBOX_TASK_QUEUE,
-  startToCloseTimeout: '5 minutes',
+  startToCloseTimeout: '10 minutes',
   retry: { maximumAttempts: 2 },
 });
 
 const sandboxAgent = proxyActivities<typeof activities>({
   taskQueue: SANDBOX_TASK_QUEUE,
-  startToCloseTimeout: '15 minutes',
+  startToCloseTimeout: '20 minutes',
   retry: { maximumAttempts: 2 },
 });
 
-// ── Signal ──────────────────────────────────────────────
+// ── Signal ───────────────────────────────────────────────────────────
 
 export const reviewSignal = defineSignal<[ReviewDecision]>('reviewDecision');
 
-// ── Workflow ────────────────────────────────────────────
+// ── Loop caps ────────────────────────────────────────────────────────
+
+const MAX_ANALYSIS_ROUNDS = 5;
+const MAX_IMPLEMENT_ROUNDS = 3;
+const MAX_REVIEW_ROUNDS = 5;
+
+// ── Workflow ─────────────────────────────────────────────────────────
 
 export async function resolveDefectWorkflow(
   input: ResolveDefectInput
@@ -69,22 +76,21 @@ export async function resolveDefectWorkflow(
       { projectId: input.projectId }
     );
 
-    // ── Phase 1: Analyze → Review loop ──
-    const { analysis, feedback: approvalFeedback } = await analyzeLoop(
-      input,
-      sandboxState
-    );
+    // Phase 1 — Analyze with HITL loop
+    const analysis = await analyzeWithReview(input, sandboxState);
 
-    // ── Phase 2: Implement → Diff review loop ──
-    await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
-    const resolution = await implementLoop(
+    // Phase 2 — Reproduce (conditional on analysis signals)
+    const oracle = await maybeReproduce(input, sandboxState, analysis);
+
+    // Phase 3 — Implement → Filter → HITL-final loop
+    const resolution = await implementWithFilter(
       input,
       sandboxState,
       analysis,
-      approvalFeedback
+      oracle
     );
 
-    // ── Phase 3: Push + PR ──
+    // Phase 4 — Push + PR
     await main.saveTaskEventsActivity(
       input.taskId,
       [
@@ -151,21 +157,22 @@ export async function resolveDefectWorkflow(
     }
   }
 
-  // ── Inner loops ───────────────────────────────────────
+  // ── Inner phases ───────────────────────────────────────────────────
 
-  async function analyzeLoop(
+  async function analyzeWithReview(
     input: ResolveDefectInput,
     sandboxState: SandboxState
-  ): Promise<{ analysis: DefectAnalysis; feedback: string | undefined }> {
+  ): Promise<DefectAnalysis> {
     let feedback: string | undefined;
 
-    while (true) {
+    for (let round = 0; round < MAX_ANALYSIS_ROUNDS; round++) {
       await main.saveTaskEventsActivity(
         input.taskId,
         [
           {
             stage: 'analysis',
-            event: 'Analysis stage started',
+            event:
+              round === 0 ? 'Analysis started' : `Analysis retry #${round}`,
             level: 'info',
             timestamp: new Date().toISOString(),
           },
@@ -195,50 +202,177 @@ export async function resolveDefectWorkflow(
       const decision = consumeReview();
 
       if (decision.action === 'approve') {
-        return { analysis, feedback: decision.feedback };
+        return analysis;
       }
       feedback = decision.feedback;
     }
+
+    throw new Error(
+      `Analysis did not converge after ${MAX_ANALYSIS_ROUNDS} review rounds`
+    );
   }
 
-  async function implementLoop(
+  async function maybeReproduce(
     input: ResolveDefectInput,
     sandboxState: SandboxState,
-    analysis: DefectAnalysis,
-    initialFeedback: string | undefined
-  ): Promise<ResolutionResult> {
-    let feedback = initialFeedback;
-
-    while (true) {
+    analysis: DefectAnalysis
+  ): Promise<ReproductionOracle | null> {
+    const shouldAttempt = analysis.hasTestInfra || analysis.hasWebUI;
+    if (!shouldAttempt) {
       await main.saveTaskEventsActivity(
         input.taskId,
         [
           {
-            stage: 'implement',
-            event: 'Implementation stage started',
+            stage: 'reproduce',
+            event: 'Reproduction skipped (no test infra / web UI)',
             level: 'info',
             timestamp: new Date().toISOString(),
           },
         ],
         null,
-        { stage: 'implement', status: 'running' }
+        { stage: 'reproduce', status: 'skipped' }
       );
+      return null;
+    }
 
-      const { result: resolution, observation } =
-        await sandboxAgent.implementResolutionActivity(
-          sandboxState,
-          input.defectDescription,
-          analysis,
-          feedback
+    await main.saveTaskEventsActivity(
+      input.taskId,
+      [
+        {
+          stage: 'reproduce',
+          event: 'Generating reproduction oracle',
+          level: 'info',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      null,
+      { stage: 'reproduce', status: 'running' }
+    );
+
+    const { result: oracle, observation } =
+      await sandboxAgent.reproduceDefectActivity(sandboxState, analysis);
+
+    await main.saveTaskEventsActivity(
+      input.taskId,
+      observation.events,
+      observation.cost,
+      {
+        stage: 'reproduce',
+        status: oracle.mode === 'none' ? 'skipped' : 'completed',
+      }
+    );
+
+    return oracle.mode === 'none' ? null : oracle;
+  }
+
+  async function implementWithFilter(
+    input: ResolveDefectInput,
+    sandboxState: SandboxState,
+    analysis: DefectAnalysis,
+    oracle: ReproductionOracle | null
+  ): Promise<ResolutionResult> {
+    let feedback: string | undefined;
+
+    for (let round = 0; round < MAX_REVIEW_ROUNDS; round++) {
+      // Inner: implement with automated-filter retry loop
+      let resolution: ResolutionResult | undefined;
+      let filterResult:
+        | Awaited<ReturnType<typeof sandboxInfra.filterCandidateActivity>>
+        | undefined;
+
+      for (
+        let innerRound = 0;
+        innerRound < MAX_IMPLEMENT_ROUNDS;
+        innerRound++
+      ) {
+        await main.saveTaskEventsActivity(
+          input.taskId,
+          [
+            {
+              stage: 'implement',
+              event:
+                innerRound === 0
+                  ? 'Implementation started'
+                  : `Implementation retry #${innerRound}`,
+              level: 'info',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          null,
+          { stage: 'implement', status: 'running' }
         );
 
-      await main.saveTaskEventsActivity(
-        input.taskId,
-        observation.events,
-        observation.cost,
-        { stage: 'implement', status: 'completed' }
-      );
+        const { result, observation } =
+          await sandboxAgent.implementResolutionActivity(
+            sandboxState,
+            input.defectDescription,
+            analysis,
+            oracle,
+            feedback
+          );
+        resolution = result;
 
+        await main.saveTaskEventsActivity(
+          input.taskId,
+          observation.events,
+          observation.cost,
+          { stage: 'implement', status: 'completed' }
+        );
+
+        await main.saveTaskEventsActivity(
+          input.taskId,
+          [
+            {
+              stage: 'filter',
+              event: 'Running automated checks',
+              level: 'info',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          null,
+          { stage: 'filter', status: 'running' }
+        );
+
+        filterResult = await sandboxInfra.filterCandidateActivity({
+          state: sandboxState,
+          analysis,
+          oracle,
+          resolution: result,
+          projectId: input.projectId,
+        });
+
+        await main.saveTaskEventsActivity(
+          input.taskId,
+          [
+            {
+              stage: 'filter',
+              event: filterResult.overallPassed
+                ? 'All automated checks passed'
+                : 'Automated checks failed',
+              level: filterResult.overallPassed ? 'info' : 'warn',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          null,
+          {
+            stage: 'filter',
+            status: filterResult.overallPassed ? 'completed' : 'failed',
+          }
+        );
+
+        if (filterResult.overallPassed) {
+          break;
+        }
+        feedback = filterResult.failureSummary;
+      }
+
+      if (!resolution || !filterResult || !filterResult.overallPassed) {
+        throw new Error(
+          `Implement did not pass automated filter after ${MAX_IMPLEMENT_ROUNDS} attempts`
+        );
+      }
+
+      // HITL-final review
       await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
         resolution,
         diff: resolution.diff,
@@ -246,15 +380,53 @@ export async function resolveDefectWorkflow(
         reviewNotes: resolution.reviewNotes,
         testsPassed: resolution.testsPassed,
         testOutput: resolution.testOutput,
+        previewUrl: filterResult.previewUrl,
+        filterChecks: {
+          oracle: filterResult.oracleCheck,
+          regression: filterResult.regressionCheck,
+          build: filterResult.buildCheck,
+          lint: filterResult.lintCheck,
+          boot: filterResult.bootCheck,
+        },
       });
+
       await resetAndWaitForReview();
       const decision = consumeReview();
 
       if (decision.action === 'approve') {
-        return resolution;
+        return {
+          ...resolution,
+          reproductionOracle: oracle ?? undefined,
+          previewUrl: filterResult.previewUrl,
+          filterChecks: buildFilterChecksRecord(filterResult),
+          autoApproved: false,
+        };
       }
       feedback = decision.feedback;
       await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
     }
+
+    throw new Error(
+      `Resolution did not converge after ${MAX_REVIEW_ROUNDS} review rounds`
+    );
   }
+}
+
+type FilterCandidateResult = Awaited<
+  ReturnType<typeof sandboxInfra.filterCandidateActivity>
+>;
+
+function buildFilterChecksRecord(
+  r: FilterCandidateResult
+): Record<string, NonNullable<FilterCandidateResult['oracleCheck']>> {
+  const out: Record<
+    string,
+    NonNullable<FilterCandidateResult['oracleCheck']>
+  > = {};
+  if (r.oracleCheck) out.oracle = r.oracleCheck;
+  if (r.regressionCheck) out.regression = r.regressionCheck;
+  if (r.buildCheck) out.build = r.buildCheck;
+  if (r.lintCheck) out.lint = r.lintCheck;
+  if (r.bootCheck) out.boot = r.bootCheck;
+  return out;
 }

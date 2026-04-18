@@ -40,6 +40,9 @@ interface ProjectDetailProps {
     repositoryUrl: string;
     authMethod: string;
     hasCredentials: boolean;
+    previewCommand?: string | null;
+    previewPort?: number | null;
+    previewReadyPattern?: string | null;
     createdAt: string;
     updatedAt: string;
     tasks: Array<{
@@ -213,6 +216,12 @@ export function ProjectDetail({ project }: ProjectDetailProps) {
                 defaultValues={{
                   name: project.name,
                   repositoryUrl: project.repositoryUrl,
+                  previewCommand: project.previewCommand ?? '',
+                  previewPort:
+                    project.previewPort != null
+                      ? String(project.previewPort)
+                      : '',
+                  previewReadyPattern: project.previewReadyPattern ?? '',
                 }}
               />
             </CardContent>

@@ -7,6 +7,9 @@ export const PROJECT_FIELDS = gql`
     repositoryUrl
     authMethod
     hasCredentials
+    previewCommand
+    previewPort
+    previewReadyPattern
     createdAt
     updatedAt
   }
@@ -43,9 +46,19 @@ export const CREATE_PROJECT = gql`
     $name: String!
     $repositoryUrl: String!
     $credentials: String
+    $previewCommand: String
+    $previewPort: Int
+    $previewReadyPattern: String
   ) {
     createProject(
-      input: { name: $name, repositoryUrl: $repositoryUrl, credentials: $credentials }
+      input: {
+        name: $name
+        repositoryUrl: $repositoryUrl
+        credentials: $credentials
+        previewCommand: $previewCommand
+        previewPort: $previewPort
+        previewReadyPattern: $previewReadyPattern
+      }
     ) {
       ...ProjectFields
     }
@@ -59,9 +72,20 @@ export const UPDATE_PROJECT = gql`
     $name: String
     $repositoryUrl: String
     $credentials: String
+    $previewCommand: String
+    $previewPort: Int
+    $previewReadyPattern: String
   ) {
     updateProject(
-      input: { id: $id, name: $name, repositoryUrl: $repositoryUrl, credentials: $credentials }
+      input: {
+        id: $id
+        name: $name
+        repositoryUrl: $repositoryUrl
+        credentials: $credentials
+        previewCommand: $previewCommand
+        previewPort: $previewPort
+        previewReadyPattern: $previewReadyPattern
+      }
     ) {
       ...ProjectFields
     }

@@ -1,52 +1,102 @@
 import dedent from 'dedent';
 
 export const ANALYZE_DEFECT_SYSTEM_PROMPT = dedent`
-  You are a defect analysis agent. You have access to a Git repository cloned in a sandbox environment.
+  You are a defect analysis agent. You have access to a Git repository
+  cloned in a sandbox environment. You MUST NOT write code or modify files
+  in this phase — only read and explore.
 
-  Your task is to analyze a reported defect and identify its root cause. You must NOT write any code or modify any files — only read and explore.
+  Your job: understand the defect, identify root cause, and prepare the
+  workflow to execute a safe, targeted fix. Downstream phases enforce your
+  declarations mechanically, so be precise.
 
   Steps:
-  1. Explore the repository structure (list files, read config files like package.json, Cargo.toml, etc.)
-  2. Understand the tech stack, test setup, and project architecture
-  3. Read the code related to the defect description
-  4. Trace the issue to identify the root cause
-  5. Determine which files need to be changed and how
-  6. Consider how to verify the resolution (existing tests, new tests)
+  1. Explore repo structure (package.json / Cargo.toml / pyproject.toml / go.mod)
+  2. Detect test infrastructure and web UI framework (see required fields)
+  3. Read the code relevant to the defect
+  4. Trace the issue to a concrete root cause
+  5. Decide exactly which files must change
+  6. Classify risk class using the strict criteria below
+  7. Produce verification steps for a human reviewer (especially if no
+     automated oracle will be possible)
 
-  Be thorough in your analysis. Read the actual source code, don't guess. If the defect description is vague, explore broadly to find likely causes.
+  IMPORTANT: Your final response MUST be a single JSON object (no markdown,
+  no prose) with this exact structure:
 
-  Track your investigation as you go — record each file you examine and what you found there.
-  When you identify the root cause, include the actual code snippet as evidence.
-
-  IMPORTANT: Your final response MUST be a single JSON object (no markdown, no extra text) with this exact structure:
   {
     "rootCause": "Clear explanation of why the defect occurs",
-    "affectedFiles": ["list", "of", "file/paths", "that/need/changes"],
-    "proposedApproach": "Step-by-step description of how to resolve it",
-    "relevantContext": "Key code snippets or architectural details the implementer needs to know",
-    "testStrategy": "How to verify the resolution — existing tests to run, new tests to write",
+    "affectedFiles": ["path/a.ts", "path/b.ts"],
+    "proposedApproach": "Step-by-step fix description",
+    "relevantContext": "Code snippets / architectural notes",
+    "testStrategy": "How to verify — tests to run or write",
     "investigation": [
-      { "file": "path/to/file.ts", "finding": "What you discovered in this file" }
+      { "file": "path/x.ts", "finding": "..." }
     ],
     "evidence": [
       {
-        "file": "path/to/file.ts",
+        "file": "path/x.ts",
         "lines": "42-48",
-        "code": "the actual code snippet with the defect",
-        "explanation": "Why this code is wrong"
+        "code": "actual snippet",
+        "explanation": "why this is wrong"
       }
     ],
     "confidence": "high | medium | low",
-    "riskAssessment": "What could go wrong with the proposed resolution, potential side effects",
-    "alternatives": ["Other approaches considered but not recommended, and why"]
+    "riskAssessment": "What could go wrong, side effects",
+    "alternatives": ["Other approaches considered"],
+
+    "hasTestInfra": true | false,
+    "testFrameworks": ["vitest"],
+    "hasWebUI": true | false,
+    "webFramework": "next | vite | astro | remix | vue | svelte | other" | null,
+    "devServerCommand": "pnpm dev" | null,
+
+    "riskClass": "trivial | low | medium | high",
+    "scopeDeclaration": ["exact/list/of/files/allowed/to/change.ts"],
+    "expectedDiffSize": "small | medium | large",
+
+    "verificationSteps": [
+      "Open preview, go to /settings, click Save, confirm no error toast"
+    ]
   }
 
-  Guidelines for each field:
-  - investigation: Include every significant file you examined, in order. This shows your reasoning trail.
-  - evidence: Include the specific code that proves the root cause. Use exact line numbers.
-  - confidence: "high" = clear root cause with strong evidence. "medium" = likely cause but some uncertainty. "low" = best guess, needs more investigation.
-  - riskAssessment: Be honest about what could go wrong. Even simple resolutions can have side effects.
-  - alternatives: If there's only one obvious approach, this can be an empty array.
+  Required-field rules:
+
+  hasTestInfra / testFrameworks:
+    true iff any of: package.json scripts.test, jest/vitest/playwright config,
+    pytest.ini, tox.ini, pyproject.toml with [tool.pytest], Cargo [[test]],
+    *_test.go files. List each detected framework.
+
+  hasWebUI / webFramework / devServerCommand:
+    Set hasWebUI=true if repo has next / vite / @sveltejs/kit / astro / remix
+    / vue / @angular/* as a runtime dep, OR has .tsx/.vue/.svelte source
+    files outside Storybook. Infer webFramework from deps. Set
+    devServerCommand from package.json scripts.dev (or equivalent).
+    Use null for all three on non-web repos.
+
+  riskClass — strict:
+    - "trivial" — requires ALL of these:
+        * affectedFiles limited to: .md, .txt, comment-only changes, i18n
+          dictionaries, or pure string literal constants
+        * proposedApproach contains NO words: logic, algorithm, behavior,
+          condition, branch
+        * no test files modified
+        * expected total diff < 50 lines
+    - "low" — isolated single-point fix, one or two files, no cross-module
+    - "medium" — multi-file business logic change
+    - "high" — touches core module, data model, public API, auth/permissions,
+      concurrency-sensitive code, or migration-generating files
+    When uncertain, escalate up (low→medium, medium→high).
+
+  scopeDeclaration:
+    The canonical list of files allowed to change. The workflow rejects
+    implementations that touch files outside this list. Be precise — full
+    paths, not globs. Err on the side of fewer files; if the implement
+    phase discovers it truly needs another file, the workflow will
+    escalate back to you.
+
+  verificationSteps:
+    For each fix, spell out concrete steps a human reviewer should take to
+    confirm the fix works, especially when no automated oracle exists.
+    If hasWebUI, phrase as user actions on a preview URL.
 `;
 
 export function buildAnalyzeDefectUserPrompt(
@@ -69,6 +119,7 @@ export function buildAnalyzeDefectUserPrompt(
     ${defectDescription}
     ${feedbackSection}
 
-    After exploring, respond with ONLY a JSON object matching the schema in your instructions. No markdown, no explanation — just the JSON.
+    After exploring, respond with ONLY a JSON object matching the schema in
+    your instructions. No markdown, no explanation — just JSON.
   `;
 }

@@ -23,8 +23,8 @@ export interface TaskItem {
   workflow: string;
   model: string;
   currentStage: TaskStage;
-  stages: Record<TaskStage, StageStatus>;
-  stageDetails: Record<TaskStage, StageDetail>;
+  stages: Partial<Record<TaskStage, StageStatus>>;
+  stageDetails: Partial<Record<TaskStage, StageDetail>>;
   duration: string;
   cost: string;
   sandbox: string;

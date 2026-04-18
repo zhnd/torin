@@ -37,6 +37,15 @@ export class UpdateProjectService {
       ...(input.repositoryUrl != null && {
         repositoryUrl: input.repositoryUrl,
       }),
+      ...(input.previewCommand !== undefined && {
+        previewCommand: input.previewCommand,
+      }),
+      ...(input.previewPort !== undefined && {
+        previewPort: input.previewPort,
+      }),
+      ...(input.previewReadyPattern !== undefined && {
+        previewReadyPattern: input.previewReadyPattern,
+      }),
     };
 
     if (input.credentials) {

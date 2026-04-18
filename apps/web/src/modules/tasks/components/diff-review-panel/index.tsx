@@ -39,6 +39,17 @@ interface DiffReviewData {
     summary?: string;
     branch?: string;
   };
+  previewUrl?: string;
+  filterChecks?: Record<
+    string,
+    | {
+        name: string;
+        passed: boolean;
+        durationMs: number;
+        output?: string;
+      }
+    | undefined
+  >;
 }
 
 interface DiffReviewPanelProps {
@@ -134,6 +145,55 @@ export function DiffReviewPanel({
                 {data.resolution.branch}
               </p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Preview URL — shown when FILTER's boot-verify produced one */}
+      {data.previewUrl && (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Preview available</p>
+              <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+                {data.previewUrl}
+              </p>
+            </div>
+            <a
+              href={data.previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm underline underline-offset-4"
+            >
+              Open preview
+            </a>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Filter check results */}
+      {data.filterChecks && Object.keys(data.filterChecks).length > 0 && (
+        <Card>
+          <CardContent className="py-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Automated checks
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.values(data.filterChecks)
+                .filter((c): c is NonNullable<typeof c> => c !== undefined)
+                .map((c) => (
+                  <span
+                    key={c.name}
+                    className={`text-xs rounded px-2 py-0.5 ${
+                      c.passed
+                        ? 'bg-green-500/15 text-green-700 dark:text-green-400'
+                        : 'bg-red-500/15 text-red-700 dark:text-red-400'
+                    }`}
+                  >
+                    {c.name}: {c.passed ? 'pass' : 'fail'}
+                  </span>
+                ))}
+            </div>
           </CardContent>
         </Card>
       )}

@@ -5,5 +5,16 @@ export const CreateProjectInput = builder.inputType('CreateProjectInput', {
     name: t.string({ required: true }),
     repositoryUrl: t.string({ required: true }),
     credentials: t.string({ description: 'GitHub personal access token' }),
+    previewCommand: t.string({
+      description:
+        'Command to start the dev server (e.g. "pnpm dev"). When set, defect-resolution fixes boot-verify + expose a preview URL to the reviewer.',
+    }),
+    previewPort: t.int({
+      description: 'Port the dev server listens on (e.g. 3000).',
+    }),
+    previewReadyPattern: t.string({
+      description:
+        'Substring that, when seen in dev-server logs, indicates readiness. Optional — defaults are inferred by framework.',
+    }),
   }),
 });

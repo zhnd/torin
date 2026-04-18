@@ -21,7 +21,9 @@ const LEVEL_LINE: Record<EventLevel, string> = {
 const STAGE_LABELS: Record<TaskStage, string> = {
   analysis: 'Analysis',
   plan: 'Plan',
+  reproduce: 'Reproduce',
   implement: 'Implement',
+  filter: 'Filter',
   test: 'Test',
   pr: 'PR',
 };

@@ -23,6 +23,13 @@ export interface DockerSandboxInit {
   githubToken?: string;
   currentBranch?: string;
   hooks?: SandboxHooks;
+  /** Container ports this sandbox knows about. */
+  ports?: number[];
+  /**
+   * containerPort → hostPort mapping, snapshotted at create/reconnect time.
+   * Populated by the caller after `container.start()` via `inspect()`.
+   */
+  portMap?: Record<number, number>;
 }
 
 export class DockerSandbox implements Sandbox {
@@ -36,6 +43,8 @@ export class DockerSandbox implements Sandbox {
   private readonly docker: Docker;
   private readonly container: Docker.Container;
   private readonly credentialEnv: Record<string, string>;
+  private readonly declaredPorts: number[];
+  private readonly portMap: Record<number, number>;
   private stopped = false;
 
   constructor(init: DockerSandboxInit) {
@@ -47,6 +56,8 @@ export class DockerSandbox implements Sandbox {
     this.currentBranch = init.currentBranch;
     this.hooks = init.hooks;
     this.credentialEnv = buildCredentialEnv(init.githubToken);
+    this.declaredPorts = init.ports ?? [];
+    this.portMap = init.portMap ?? {};
   }
 
   async exec(command: string, options?: ExecOptions): Promise<ExecResult> {
@@ -58,6 +69,67 @@ export class DockerSandbox implements Sandbox {
       options
     );
     return execInContainer(this.docker, this.container, input);
+  }
+
+  /**
+   * Start a command that outlives this call (for dev servers, watchers).
+   * The command is launched with stdout+stderr redirected to a log file
+   * inside the container; callers can poll the log by `sandbox.readFile`.
+   * When the sandbox stops, the process is killed along with it.
+   */
+  async execDetached(
+    command: string,
+    options: {
+      cwd?: string;
+      env?: Record<string, string>;
+      logFile?: string;
+    } = {}
+  ): Promise<{ commandId: string; logFile: string }> {
+    const logFile = options.logFile ?? `/tmp/torin-detached-${Date.now()}.log`;
+    // Redirect all output, close stdin, run in a new session so it
+    // survives the exec teardown. tini (Init=true) reaps zombies.
+    const wrapped = `setsid sh -c ${shellArg(`( ${command} ) >${logFile} 2>&1 </dev/null &`)}`;
+    const envList = this.composeEnv(options.env)
+      ? Object.entries(this.composeEnv(options.env) ?? {}).map(
+          ([k, v]) => `${k}=${v}`
+        )
+      : undefined;
+    const exec = await this.container.exec({
+      Cmd: ['sh', '-c', wrapped],
+      AttachStdout: false,
+      AttachStderr: false,
+      WorkingDir: options.cwd ?? this.workingDirectory,
+      ...(envList ? { Env: envList } : {}),
+    });
+    await exec.start({ Detach: true, Tty: false });
+    return { commandId: exec.id, logFile };
+  }
+
+  /**
+   * Resolve the host-visible URL for a port that was declared at create time.
+   * Returns `http://localhost:<hostPort>` where hostPort was auto-assigned
+   * by Docker at create time and cached.
+   */
+  domain(port: number): string {
+    if (!this.declaredPorts.includes(port)) {
+      throw new Error(
+        `Port ${port} was not declared when the sandbox was created`
+      );
+    }
+    const hostPort = this.portMap[port];
+    if (!hostPort) {
+      throw new Error(`Port ${port} has no host binding`);
+    }
+    return `http://localhost:${hostPort}`;
+  }
+
+  private composeEnv(
+    extra?: Record<string, string>
+  ): Record<string, string> | undefined {
+    const hasAny =
+      !!this.env || !!extra || Object.keys(this.credentialEnv).length > 0;
+    if (!hasAny) return undefined;
+    return { ...this.env, ...this.credentialEnv, ...extra };
   }
 
   async readFile(filePath: string): Promise<string> {
@@ -161,6 +233,9 @@ export class DockerSandbox implements Sandbox {
       containerId: this.id,
       workingDirectory: this.workingDirectory,
       ...(this.currentBranch ? { currentBranch: this.currentBranch } : {}),
+      ...(this.declaredPorts.length > 0
+        ? { ports: this.declaredPorts, portMap: this.portMap }
+        : {}),
     };
   }
 

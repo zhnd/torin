@@ -5,7 +5,14 @@ export type TaskStatus =
   | 'COMPLETED'
   | 'FAILED';
 
-export type TaskStage = 'analysis' | 'plan' | 'implement' | 'test' | 'pr';
+export type TaskStage =
+  | 'analysis'
+  | 'plan'
+  | 'reproduce'
+  | 'implement'
+  | 'filter'
+  | 'test'
+  | 'pr';
 export type StageStatus =
   | 'pending'
   | 'running'
@@ -26,7 +33,9 @@ export type TaskBadge = 'path_deviation' | 'needs_review' | 'failed';
 export const TASK_STAGES: TaskStage[] = [
   'analysis',
   'plan',
+  'reproduce',
   'implement',
+  'filter',
   'test',
   'pr',
 ];

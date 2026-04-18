@@ -22,6 +22,12 @@ export interface CreateDockerSandboxOptions {
   workingDirectory?: string;
   memoryMb?: number;
   cpus?: number;
+  /**
+   * Container ports to publish to the host for preview URLs. Each listed
+   * port gets bound to a random host port; callers read the mapping via
+   * `sandbox.domain(port)`.
+   */
+  ports?: number[];
 }
 
 const DEFAULT_MEMORY_MB = 2048;
@@ -66,21 +72,45 @@ export async function createDockerSandbox(
     await ensureImage(docker, image);
   }
 
-  log.info({ image, workingDirectory }, 'Creating container');
+  const ports = options.ports ?? [];
+  const exposedPorts: Record<string, Record<string, never>> = {};
+  const portBindings: Record<string, Array<{ HostPort: string }>> = {};
+  for (const port of ports) {
+    exposedPorts[`${port}/tcp`] = {};
+    portBindings[`${port}/tcp`] = [{ HostPort: '' }];
+  }
+
+  log.info({ image, workingDirectory, ports }, 'Creating container');
   const container = await docker.createContainer({
     Image: image,
     Cmd: ['sleep', 'infinity'],
     WorkingDir: workingDirectory,
+    ...(ports.length > 0 ? { ExposedPorts: exposedPorts } : {}),
     HostConfig: {
       NetworkMode: 'bridge',
       Memory: memoryMb * 1024 * 1024,
       CpuPeriod: 100_000,
       CpuQuota: cpus * 100_000,
       Init: true,
+      ...(ports.length > 0 ? { PortBindings: portBindings } : {}),
     },
   });
   await container.start();
   log.info({ containerId: container.id }, 'Container started');
+
+  // Snapshot the container's host port assignments so callers can resolve
+  // preview URLs synchronously later.
+  const portMap: Record<number, number> = {};
+  if (ports.length > 0) {
+    const info = await container.inspect();
+    for (const port of ports) {
+      const binding = info.NetworkSettings?.Ports?.[`${port}/tcp`];
+      const hostPort = binding?.[0]?.HostPort;
+      if (hostPort) {
+        portMap[port] = Number.parseInt(hostPort, 10);
+      }
+    }
+  }
 
   const sandbox = new DockerSandbox({
     docker,
@@ -90,6 +120,8 @@ export async function createDockerSandbox(
     githubToken,
     currentBranch: options.source?.newBranch ?? options.source?.branch,
     hooks: options.hooks,
+    ports,
+    portMap,
   });
 
   if (options.source && fromCache) {
