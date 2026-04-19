@@ -52,8 +52,13 @@ export const reviewSignal = defineSignal<[ReviewDecision]>('reviewDecision');
 // ── Loop caps ────────────────────────────────────────────────────────
 
 const MAX_ANALYSIS_ROUNDS = 5;
-const MAX_IMPLEMENT_ROUNDS = 3;
 const MAX_REVIEW_ROUNDS = 5;
+
+// Phase 2b: Best-of-N sampling. N candidates are generated sequentially
+// in the same sandbox (reset between each); the top-1 by critic score is
+// forwarded to HITL. Failed samples still feed memos into later samples,
+// so the agent learns across them.
+const IMPLEMENT_SAMPLES = 3;
 
 // ── Workflow ─────────────────────────────────────────────────────────
 
@@ -290,24 +295,46 @@ export async function resolveDefectWorkflow(
   ): Promise<ResolutionResult> {
     let reviewerFeedback: string | undefined;
     // Reflexion-style bounded memory across all IMPLEMENT rounds — includes
-    // both FILTER-fail retries (inner) and HITL-reject retries (outer).
+    // both failed-sample memos (inner) and HITL-reject memos (outer).
     const attemptMemos: AttemptMemo[] = [];
+    let detectedBaseBranch: string | undefined;
 
     for (let round = 0; round < MAX_REVIEW_ROUNDS; round++) {
-      // Inner: implement with automated-filter retry loop
-      let resolution: ResolutionResult | undefined;
-      let filterResult:
-        | Awaited<ReturnType<typeof sandboxInfra.filterCandidateActivity>>
-        | undefined;
-      let criticReview: CriticReview | undefined;
+      type Candidate = {
+        resolution: ResolutionResult;
+        /**
+         * Branch name the agent originally created (e.g. fix/memory-leak).
+         * Preserved so we can rename the selected candidate back to this
+         * name before pushing — candidates live under `torin/cand-*`
+         * between sampling and selection to survive `resetSandboxActivity`
+         * and collisions across samples that happen to pick the same slug.
+         */
+        originalBranch: string;
+        filterResult: Awaited<
+          ReturnType<typeof sandboxInfra.filterCandidateActivity>
+        >;
+        criticReview: CriticReview;
+      };
+      const candidates: Candidate[] = [];
 
-      for (
-        let innerRound = 0;
-        innerRound < MAX_IMPLEMENT_ROUNDS;
-        innerRound++
-      ) {
-        // SWE-agent-style precondition guardrail: block retries where the
-        // previous attempt left the working tree in a broken state.
+      // Best-of-N sampling: run IMPLEMENT_SAMPLES samples, collect those
+      // that pass both FILTER and CRITIC as candidates. Failed samples
+      // append memos so later samples diverge.
+      for (let sampleId = 1; sampleId <= IMPLEMENT_SAMPLES; sampleId++) {
+        // Reset sandbox between samples so each starts from a clean
+        // base. First sample of the first round can skip (sandbox is
+        // fresh from createSandbox).
+        if (sampleId > 1 || round > 0) {
+          const reset = await sandboxInfra.resetSandboxActivity({
+            state: sandboxState,
+            ...(detectedBaseBranch ? { baseBranch: detectedBaseBranch } : {}),
+          });
+          detectedBaseBranch = reset.baseBranch;
+        }
+
+        // SWE-agent-style precondition guardrail: block samples when the
+        // previous attempt left an unexpected artifact (e.g., deleted a
+        // test file the reset should restore — sanity check only).
         let preconditionViolations: string[] | undefined;
         if (attemptMemos.length > 0) {
           const pre = await sandboxInfra.checkPreconditionsActivity({
@@ -332,10 +359,7 @@ export async function resolveDefectWorkflow(
           [
             {
               stage: 'implement',
-              event:
-                innerRound === 0 && round === 0
-                  ? 'Implementation started'
-                  : `Implementation retry #${attemptMemos.length}`,
+              event: `Implementation sample ${sampleId}/${IMPLEMENT_SAMPLES} (round ${round + 1})`,
               level: 'info',
               timestamp: new Date().toISOString(),
             },
@@ -352,7 +376,9 @@ export async function resolveDefectWorkflow(
             oracle,
             feedback || undefined
           );
-        resolution = result;
+        if (!detectedBaseBranch) {
+          detectedBaseBranch = result.baseBranch;
+        }
 
         await main.saveTaskEventsActivity(
           input.taskId,
@@ -375,7 +401,7 @@ export async function resolveDefectWorkflow(
           { stage: 'filter', status: 'running' }
         );
 
-        filterResult = await sandboxInfra.filterCandidateActivity({
+        const filterResult = await sandboxInfra.filterCandidateActivity({
           state: sandboxState,
           analysis,
           oracle,
@@ -389,8 +415,8 @@ export async function resolveDefectWorkflow(
             {
               stage: 'filter',
               event: filterResult.overallPassed
-                ? 'All automated checks passed'
-                : 'Automated checks failed',
+                ? `Sample ${sampleId} passed filter`
+                : `Sample ${sampleId} failed filter`,
               level: filterResult.overallPassed ? 'info' : 'warn',
               timestamp: new Date().toISOString(),
             },
@@ -428,18 +454,13 @@ export async function resolveDefectWorkflow(
           continue;
         }
 
-        // FILTER passed. Now run the critic (Phase 2a). Critic may still
-        // reject the patch for reasons tests can't catch — scope creep,
-        // missed edge cases, subtle behavior drift. A rejected critic
-        // verdict feeds a memo back into the IMPLEMENT loop, same shape
-        // as a filter failure.
-        criticReview = undefined;
+        // FILTER passed → run critic.
         await main.saveTaskEventsActivity(
           input.taskId,
           [
             {
               stage: 'critic',
-              event: 'Critic review starting',
+              event: `Sample ${sampleId} entering critic review`,
               level: 'info',
               timestamp: new Date().toISOString(),
             },
@@ -455,7 +476,7 @@ export async function resolveDefectWorkflow(
           oracle,
           result
         );
-        criticReview = criticOutcome.result;
+        const criticReview = criticOutcome.result;
 
         await main.saveTaskEventsActivity(
           input.taskId,
@@ -468,10 +489,26 @@ export async function resolveDefectWorkflow(
         );
 
         if (criticReview.approve) {
-          break;
+          // Preserve this sample's branch under a unique name so the next
+          // `resetSandboxActivity` (which deletes fix/*) and subsequent
+          // `git checkout -B` cannot overwrite it. The original branch
+          // name is restored at selection time.
+          const candidateBranch = `torin/cand-${round}-${sampleId}`;
+          await sandboxInfra.renameBranchActivity(
+            sandboxState,
+            result.branch,
+            candidateBranch
+          );
+          candidates.push({
+            resolution: { ...result, branch: candidateBranch },
+            originalBranch: result.branch,
+            filterResult,
+            criticReview,
+          });
+          continue;
         }
 
-        // Critic rejected → memo with concerns, retry IMPLEMENT.
+        // Critic rejected → memo with concerns, next sample will avoid.
         attemptMemos.push(
           memoFromAttempt({
             attemptNum: attemptMemos.length + 1,
@@ -491,16 +528,46 @@ export async function resolveDefectWorkflow(
         );
       }
 
-      if (
-        !resolution ||
-        !filterResult ||
-        !filterResult.overallPassed ||
-        (criticReview && !criticReview.approve)
-      ) {
+      if (candidates.length === 0) {
         throw new Error(
-          `Implement did not pass filter + critic after ${MAX_IMPLEMENT_ROUNDS} attempts`
+          `No sample passed filter + critic after ${IMPLEMENT_SAMPLES} attempts`
         );
       }
+
+      // Select top-1: highest critic score, tiebreak by smallest diff.
+      candidates.sort((a, b) => {
+        const scoreDiff = b.criticReview.score - a.criticReview.score;
+        if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
+        return diffSize(a.resolution) - diffSize(b.resolution);
+      });
+      const selected = candidates[0];
+      // Restore the agent's original branch name on the winning candidate
+      // so downstream push + PR use the expected slug. Losers stay under
+      // their `torin/cand-*` names; sandbox is destroyed at workflow end.
+      await sandboxInfra.renameBranchActivity(
+        sandboxState,
+        selected.resolution.branch,
+        selected.originalBranch
+      );
+      const resolution: ResolutionResult = {
+        ...selected.resolution,
+        branch: selected.originalBranch,
+      };
+      const { filterResult, criticReview } = selected;
+
+      await main.saveTaskEventsActivity(
+        input.taskId,
+        [
+          {
+            stage: 'critic',
+            event: `Selected 1 of ${candidates.length} passing candidates (critic score ${criticReview.score.toFixed(2)})`,
+            level: 'info',
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        null,
+        { stage: 'critic', status: 'completed' }
+      );
 
       // HITL-final review — human sees the critic's concerns too
       await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
@@ -563,6 +630,11 @@ export async function resolveDefectWorkflow(
 type FilterCandidateResult = Awaited<
   ReturnType<typeof sandboxInfra.filterCandidateActivity>
 >;
+
+/** Sum of additions + deletions across all files in a resolution. */
+function diffSize(resolution: ResolutionResult): number {
+  return resolution.diff.reduce((sum, d) => sum + d.additions + d.deletions, 0);
+}
 
 function buildFilterChecksRecord(
   r: FilterCandidateResult

@@ -45,7 +45,9 @@ export const IMPLEMENT_RESOLUTION_SYSTEM_PROMPT = dedent`
   1. Read the files in scopeDeclaration.
   2. Detect default branch:
        git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo refs/remotes/origin/main
-  3. Create a resolution branch: git checkout -b fix/<short-slug>
+  3. Create a resolution branch (force-overwrite any existing branch of
+     the same name — the workflow may have pre-created a stub):
+       git checkout -B fix/<short-slug>
   4. Implement the change — only inside scopeDeclaration.
   5. Run the reproduction oracle (if present). Must pass.
   6. Run the full test suite (if hasTestInfra). Must not regress.
