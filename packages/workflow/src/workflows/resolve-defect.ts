@@ -22,6 +22,10 @@ import {
   buildRetryFeedback,
   memoFromAttempt,
 } from '../utils/retry-feedback.js';
+import {
+  isAutoApprovable,
+  recommendedSampleCount,
+} from '../utils/trivial-gate.js';
 
 // ── Activity proxies ─────────────────────────────────────────────────
 // main         — DB / GitHub API; high concurrency
@@ -59,6 +63,12 @@ const MAX_REVIEW_ROUNDS = 5;
 // forwarded to HITL. Failed samples still feed memos into later samples,
 // so the agent learns across them.
 const IMPLEMENT_SAMPLES = 3;
+
+// Phase 2c: Auto-approve trivial changes (docs / i18n / comments only)
+// without HITL, subject to the hard-rule gate. Read once at workflow
+// module load — deterministic for replay as long as the worker's env
+// doesn't flip mid-run.
+const AUTO_APPROVE_TRIVIAL_ENV = process.env.TORIN_AUTO_APPROVE_TRIVIAL;
 
 // ── Workflow ─────────────────────────────────────────────────────────
 
@@ -317,10 +327,20 @@ export async function resolveDefectWorkflow(
       };
       const candidates: Candidate[] = [];
 
-      // Best-of-N sampling: run IMPLEMENT_SAMPLES samples, collect those
+      // Trivial changes (docs / i18n / string literals) have near-zero
+      // diversity across samples — Best-of-N's premise doesn't apply.
+      // Drop to N=1 for this class, save ~2× tokens. Orthogonal to the
+      // auto-approve gate: even when the gate later rejects and HITL
+      // kicks in, we still avoided the wasted samples.
+      const samplesThisRound = recommendedSampleCount(
+        analysis,
+        IMPLEMENT_SAMPLES
+      );
+
+      // Best-of-N sampling: run samplesThisRound samples, collect those
       // that pass both FILTER and CRITIC as candidates. Failed samples
       // append memos so later samples diverge.
-      for (let sampleId = 1; sampleId <= IMPLEMENT_SAMPLES; sampleId++) {
+      for (let sampleId = 1; sampleId <= samplesThisRound; sampleId++) {
         // Reset sandbox between samples so each starts from a clean
         // base. First sample of the first round can skip (sandbox is
         // fresh from createSandbox).
@@ -359,7 +379,7 @@ export async function resolveDefectWorkflow(
           [
             {
               stage: 'implement',
-              event: `Implementation sample ${sampleId}/${IMPLEMENT_SAMPLES} (round ${round + 1})`,
+              event: `Implementation sample ${sampleId}/${samplesThisRound} (round ${round + 1})`,
               level: 'info',
               timestamp: new Date().toISOString(),
             },
@@ -530,7 +550,7 @@ export async function resolveDefectWorkflow(
 
       if (candidates.length === 0) {
         throw new Error(
-          `No sample passed filter + critic after ${IMPLEMENT_SAMPLES} attempts`
+          `No sample passed filter + critic after ${samplesThisRound} attempts`
         );
       }
 
@@ -568,6 +588,38 @@ export async function resolveDefectWorkflow(
         null,
         { stage: 'critic', status: 'completed' }
       );
+
+      // Phase 2c: trivial auto-approve. Hard-rule gate: only docs/i18n,
+      // diff < 20 lines, critic clean, no tests modified, env flag on.
+      // Conservative by design — false positives ship bugs.
+      const autoDecision = isAutoApprovable(
+        analysis,
+        resolution,
+        criticReview,
+        AUTO_APPROVE_TRIVIAL_ENV
+      );
+      if (autoDecision.autoApprove) {
+        await main.saveTaskEventsActivity(
+          input.taskId,
+          [
+            {
+              stage: 'pr',
+              event: 'Trivial auto-approve: bypassing HITL',
+              level: 'info',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          null,
+          { stage: 'pr', status: 'running' }
+        );
+        return {
+          ...resolution,
+          reproductionOracle: oracle ?? undefined,
+          previewUrl: filterResult.previewUrl,
+          filterChecks: buildFilterChecksRecord(filterResult),
+          autoApproved: true,
+        };
+      }
 
       // HITL-final review — human sees the critic's concerns too
       await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
