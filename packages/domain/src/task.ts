@@ -11,6 +11,7 @@ export type TaskStage =
   | 'reproduce'
   | 'implement'
   | 'filter'
+  | 'critic'
   | 'test'
   | 'pr';
 export type StageStatus =
@@ -36,6 +37,7 @@ export const TASK_STAGES: TaskStage[] = [
   'reproduce',
   'implement',
   'filter',
+  'critic',
   'test',
   'pr',
 ];

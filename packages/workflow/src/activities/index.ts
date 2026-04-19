@@ -5,6 +5,7 @@ export { checkPreconditionsActivity } from './check-preconditions.js';
 export { commitOracleActivity } from './commit-oracle.js';
 export { createPullRequestActivity } from './create-pull-request.js';
 export { createSandboxActivity } from './create-sandbox.js';
+export { criticResolutionActivity } from './critic-resolution.js';
 export { destroySandboxActivity } from './destroy-sandbox.js';
 export { filterCandidateActivity } from './filter-candidate.js';
 export { implementResolutionActivity } from './implement-resolution.js';

@@ -29,6 +29,13 @@ interface FileChange {
   description: string;
 }
 
+interface CriticConcern {
+  severity: 'blocking' | 'warning' | 'info';
+  description: string;
+  file?: string;
+  suggestion?: string;
+}
+
 interface DiffReviewData {
   diff?: FileDiff[];
   changes?: FileChange[];
@@ -50,6 +57,12 @@ interface DiffReviewData {
       }
     | undefined
   >;
+  criticReview?: {
+    approve: boolean;
+    score: number;
+    scopeAssessment: 'clean' | 'ambiguous' | 'out-of-scope';
+    concerns: CriticConcern[];
+  };
 }
 
 interface DiffReviewPanelProps {
@@ -167,6 +180,86 @@ export function DiffReviewPanel({
             >
               Open preview
             </a>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Critic review */}
+      {data.criticReview && (
+        <Card
+          className={
+            data.criticReview.scopeAssessment === 'out-of-scope'
+              ? 'border-red-500/50'
+              : data.criticReview.concerns.some(
+                    (c) => c.severity === 'blocking'
+                  )
+                ? 'border-red-500/50'
+                : data.criticReview.concerns.some(
+                      (c) => c.severity === 'warning'
+                    )
+                  ? 'border-amber-500/50'
+                  : 'border-green-500/40'
+          }
+        >
+          <CardContent className="py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">
+                  Critic review
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    score {data.criticReview.score.toFixed(2)} · scope{' '}
+                    {data.criticReview.scopeAssessment}
+                  </span>
+                </p>
+              </div>
+              <span
+                className={`text-xs rounded px-2 py-0.5 ${
+                  data.criticReview.approve
+                    ? 'bg-green-500/15 text-green-700 dark:text-green-400'
+                    : 'bg-red-500/15 text-red-700 dark:text-red-400'
+                }`}
+              >
+                {data.criticReview.approve ? 'approved' : 'rejected'}
+              </span>
+            </div>
+            {data.criticReview.concerns.length > 0 && (
+              <div className="space-y-2">
+                {data.criticReview.concerns.map((c, i) => (
+                  <div
+                    // biome-ignore lint/suspicious/noArrayIndexKey: concerns array is stable for a given review
+                    key={`${i}-${c.description.slice(0, 30)}`}
+                    className="rounded-md border p-2"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={`shrink-0 text-xs rounded px-1.5 py-0.5 ${
+                          c.severity === 'blocking'
+                            ? 'bg-red-500/15 text-red-700 dark:text-red-400'
+                            : c.severity === 'warning'
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                              : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {c.severity}
+                      </span>
+                      <div className="flex-1 text-sm">
+                        <p>{c.description}</p>
+                        {c.file && (
+                          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                            {c.file}
+                          </p>
+                        )}
+                        {c.suggestion && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            💡 {c.suggestion}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

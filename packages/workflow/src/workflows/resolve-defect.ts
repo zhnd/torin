@@ -5,6 +5,7 @@ import {
   setHandler,
 } from '@temporalio/workflow';
 import type {
+  CriticReview,
   DefectAnalysis,
   ReproductionOracle,
   ResolutionResult,
@@ -298,6 +299,7 @@ export async function resolveDefectWorkflow(
       let filterResult:
         | Awaited<ReturnType<typeof sandboxInfra.filterCandidateActivity>>
         | undefined;
+      let criticReview: CriticReview | undefined;
 
       for (
         let innerRound = 0;
@@ -400,10 +402,76 @@ export async function resolveDefectWorkflow(
           }
         );
 
-        if (filterResult.overallPassed) {
+        if (!filterResult.overallPassed) {
+          // Accumulate Reflexion-style memo before the next IMPLEMENT retry.
+          attemptMemos.push(
+            memoFromAttempt({
+              attemptNum: attemptMemos.length + 1,
+              resolution: {
+                summary: result.summary,
+                filesChanged: result.filesChanged,
+                diff: result.diff,
+              },
+              failureSummary: filterResult.failureSummary,
+              failedChecks: [
+                filterResult.oracleCheck,
+                filterResult.regressionCheck,
+                filterResult.buildCheck,
+                filterResult.lintCheck,
+                filterResult.bootCheck,
+              ]
+                .filter((c): c is NonNullable<typeof c> => c !== undefined)
+                .filter((c) => !c.passed)
+                .map((c) => ({ name: c.name, output: c.output })),
+            })
+          );
+          continue;
+        }
+
+        // FILTER passed. Now run the critic (Phase 2a). Critic may still
+        // reject the patch for reasons tests can't catch — scope creep,
+        // missed edge cases, subtle behavior drift. A rejected critic
+        // verdict feeds a memo back into the IMPLEMENT loop, same shape
+        // as a filter failure.
+        criticReview = undefined;
+        await main.saveTaskEventsActivity(
+          input.taskId,
+          [
+            {
+              stage: 'critic',
+              event: 'Critic review starting',
+              level: 'info',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          null,
+          { stage: 'critic', status: 'running' }
+        );
+
+        const criticOutcome = await sandboxAgent.criticResolutionActivity(
+          sandboxState,
+          input.defectDescription,
+          analysis,
+          oracle,
+          result
+        );
+        criticReview = criticOutcome.result;
+
+        await main.saveTaskEventsActivity(
+          input.taskId,
+          criticOutcome.observation.events,
+          criticOutcome.observation.cost,
+          {
+            stage: 'critic',
+            status: criticReview.approve ? 'completed' : 'failed',
+          }
+        );
+
+        if (criticReview.approve) {
           break;
         }
-        // Accumulate Reflexion-style memo before the next IMPLEMENT retry.
+
+        // Critic rejected → memo with concerns, retry IMPLEMENT.
         attemptMemos.push(
           memoFromAttempt({
             attemptNum: attemptMemos.length + 1,
@@ -412,28 +480,29 @@ export async function resolveDefectWorkflow(
               filesChanged: result.filesChanged,
               diff: result.diff,
             },
-            failureSummary: filterResult.failureSummary,
-            failedChecks: [
-              filterResult.oracleCheck,
-              filterResult.regressionCheck,
-              filterResult.buildCheck,
-              filterResult.lintCheck,
-              filterResult.bootCheck,
-            ]
-              .filter((c): c is NonNullable<typeof c> => c !== undefined)
-              .filter((c) => !c.passed)
-              .map((c) => ({ name: c.name, output: c.output })),
+            failureSummary: `Critic rejected (scope: ${criticReview.scopeAssessment}, score: ${criticReview.score.toFixed(2)})`,
+            failedChecks: criticReview.concerns
+              .filter((c) => c.severity !== 'info')
+              .map((c) => ({
+                name: `critic/${c.severity}`,
+                output: `${c.description}${c.suggestion ? `\nSuggestion: ${c.suggestion}` : ''}${c.file ? ` [${c.file}]` : ''}`,
+              })),
           })
         );
       }
 
-      if (!resolution || !filterResult || !filterResult.overallPassed) {
+      if (
+        !resolution ||
+        !filterResult ||
+        !filterResult.overallPassed ||
+        (criticReview && !criticReview.approve)
+      ) {
         throw new Error(
-          `Implement did not pass automated filter after ${MAX_IMPLEMENT_ROUNDS} attempts`
+          `Implement did not pass filter + critic after ${MAX_IMPLEMENT_ROUNDS} attempts`
         );
       }
 
-      // HITL-final review
+      // HITL-final review — human sees the critic's concerns too
       await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
         resolution,
         diff: resolution.diff,
@@ -443,6 +512,7 @@ export async function resolveDefectWorkflow(
         testOutput: resolution.testOutput,
         previewUrl: filterResult.previewUrl,
         reproductionOracle: oracle ?? undefined,
+        criticReview,
         filterChecks: {
           oracle: filterResult.oracleCheck,
           regression: filterResult.regressionCheck,

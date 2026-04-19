@@ -112,12 +112,13 @@ export function memoFromAttempt(input: {
   failedChecks?: Array<{ name: string; output?: string }>;
 }): AttemptMemo {
   const failureReasons: string[] = [];
-  if (input.failedChecks) {
+  if (input.failedChecks && input.failedChecks.length > 0) {
     for (const c of input.failedChecks) {
       const snippet = c.output ? firstLine(c.output) : '(no output)';
       failureReasons.push(`${c.name}: ${snippet}`);
     }
-  } else if (input.failureSummary) {
+  }
+  if (failureReasons.length === 0 && input.failureSummary) {
     failureReasons.push(firstLine(input.failureSummary));
   }
 

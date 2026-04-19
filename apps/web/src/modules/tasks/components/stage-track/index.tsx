@@ -12,6 +12,7 @@ const STAGE_LABELS: Record<TaskStage, string> = {
   reproduce: 'Repro',
   implement: 'Impl',
   filter: 'Filter',
+  critic: 'Critic',
   test: 'Test',
   pr: 'PR',
 };
