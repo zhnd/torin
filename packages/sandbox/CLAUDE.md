@@ -48,7 +48,7 @@ tier-2 (post install)  torin/repo:<repoHash>-<setupHash>
 
 Task flow: `ensureRepoImage` → `docker run <tag>` → `git fetch + reset` (delta) → optional `checkout -b` → task starts.
 
-Concurrent builds are serialized per cache key via an in-process `Map` plus a host fs lock at `TORIN_LOCK_ROOT` (default `/var/lib/torin/locks`). Orphan builder containers (label `torin.role=builder`) are cleaned on worker startup; stale managed images are pruned on a daily timer.
+Concurrent builds are serialized per cache key via an in-process `Map` plus a host fs lock at `TORIN_LOCK_ROOT` (default `<os.tmpdir()>/torin/locks`, e.g. `/tmp/torin/locks` on Linux, `/var/folders/.../torin/locks` on macOS). Orphan builder containers (label `torin.role=builder`) are cleaned on worker startup; stale managed images are pruned on a daily timer.
 
 ## Base image
 
@@ -65,7 +65,7 @@ All language toolchains come in through `mise` at tier-2 build time. A repo decl
 | `TORIN_REPO_IMAGE_MAX_AGE_MS` | 24h | Tier-2 refresh threshold |
 | `TORIN_REPO_IMAGE_PRUNE_AFTER_MS` | 7d | Managed-image eviction age |
 | `TORIN_SETUP_COMMAND_TIMEOUT_MS` | 20min | Setup step timeout |
-| `TORIN_LOCK_ROOT` | `/var/lib/torin/locks` | Host fs lock directory |
+| `TORIN_LOCK_ROOT` | `<os.tmpdir()>/torin/locks` | Host fs lock directory |
 | `TORIN_DEFAULT_NODE_VERSION` | `22` | Node default when repo doesn't declare |
 | `TORIN_DEFAULT_PYTHON_VERSION` | `3.12` | Python default |
 | `TORIN_DEFAULT_RUST_VERSION` | `stable` | Rust default |

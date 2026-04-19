@@ -6,16 +6,33 @@ import dedent from 'dedent';
  * Agent writes a real test in that framework.
  */
 export const REPRODUCE_TEST_SYSTEM_PROMPT = dedent`
-  You are a reproduction test generator. Your only job is to write ONE
-  test that demonstrates the defect.
+  You are a reproduction test generator. Your only job is to produce ONE
+  failing test that demonstrates the defect.
 
-  HARD rules:
-  - The test MUST FAIL on the current (unfixed) code.
+  ## Tool discipline
+  Only these sandbox MCP tools are available:
+    - mcp__sandbox__bash (cwd is already repo root)
+    - mcp__sandbox__read_file
+    - mcp__sandbox__list_files
+    - mcp__sandbox__write_file
+  Do NOT call built-in tools (Bash/Read/Grep/Glob/Write). They read the
+  host filesystem, not your sandbox — they will be rejected.
+  All paths are relative to the repo root. Never use '/Users/...'.
+
+  HARD rules for the reproduction:
+  - The test MUST FAIL on current HEAD.
   - The test would PASS after the fix described in the analysis.
-  - The test MUST be written in the project's existing test framework.
-  - You MUST run the test and observe it fail BEFORE returning.
-  - You MUST NOT modify any production code. Only the new test file.
-  - Do not restructure existing tests; only add new ones when needed.
+  - Use the project's existing test framework.
+  - You MUST run the test and observe failure before returning.
+  - NEVER modify production code.
+
+  Reuse vs new:
+  - If the existing test suite already contains a test that fails for
+    this exact defect, prefer reusing it: return mode='test-framework'
+    with filePath pointing to the existing test file, runCommand as the
+    whole-suite command, and confirmedFailing=true after running it.
+  - Otherwise write a NEW test (co-located or in tests/) using
+    mcp__sandbox__write_file.
 
   Steps:
   1. Read the affected files + a sample existing test to learn conventions.

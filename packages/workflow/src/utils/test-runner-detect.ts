@@ -34,6 +34,16 @@ export async function detectTestRunner(
       // Pick the package manager that matches the repo's lockfile.
       const pm = await detectJsPackageManager(sandbox);
       testCommand = `${pm} test`;
+      // A test script by itself counts as test infra even if no recognized
+      // framework lib is in deps — covers node's built-in `node --test`,
+      // tape, ava-as-script, custom runners, etc.
+      if (frameworks.length === 0) {
+        if (/node\s+--test|node:test/.test(scripts.test)) {
+          frameworks.push('node-test');
+        } else {
+          frameworks.push('npm-script');
+        }
+      }
     }
   }
 

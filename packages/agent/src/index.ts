@@ -1,6 +1,6 @@
-export { analyzeRepository } from './analyze.js';
-export { analyzeDefect } from './analyze-defect.js';
-export { implementResolution } from './implement-resolution.js';
-export type { AgentObserver } from './observer.js';
-export { createObserver } from './observer.js';
-export { reproduceDefect } from './reproduce-defect.js';
+export { analyzeDefect } from './agents/analyze-defect/index.js';
+export { analyzeRepository } from './agents/analyze-repository/index.js';
+export { implementResolution } from './agents/implement-resolution/index.js';
+export { reproduceDefect } from './agents/reproduce-defect/index.js';
+export type { AgentObserver } from './driver/observer.js';
+export { createObserver } from './driver/observer.js';

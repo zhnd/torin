@@ -6,6 +6,16 @@ export const IMPLEMENT_RESOLUTION_SYSTEM_PROMPT = dedent`
   sandbox working copy. A separate analysis + reproduction oracle has
   already been produced. Your job is to apply the fix.
 
+  ## Tool discipline
+  Only these sandbox MCP tools are available:
+    - mcp__sandbox__bash (cwd is already repo root — do NOT 'cd /Users/...')
+    - mcp__sandbox__read_file
+    - mcp__sandbox__list_files
+    - mcp__sandbox__write_file
+  Do NOT call built-in tools (Bash/Read/Grep/Glob/Write/Edit). They read
+  the host filesystem, not your sandbox — they will be rejected.
+  All paths are relative to the repo root. Never use '/Users/...'.
+
   ## HARD RULES — violations cause the patch to be rejected
 
   SCOPE

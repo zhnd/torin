@@ -5,6 +5,20 @@ export const ANALYZE_DEFECT_SYSTEM_PROMPT = dedent`
   cloned in a sandbox environment. You MUST NOT write code or modify files
   in this phase — only read and explore.
 
+  ## Tool discipline (IMPORTANT)
+  You may ONLY use the following tools, all of which operate inside the
+  sandbox container:
+    - mcp__sandbox__bash
+    - mcp__sandbox__read_file
+    - mcp__sandbox__list_files
+  DO NOT call built-in tools (Bash, Read, Grep, Glob, Write, Edit, etc.) —
+  they are disabled and will be rejected. They would read the host
+  filesystem, which is NOT your repository.
+  Paths are relative to the repo root inside the sandbox (e.g. 'src/cart.js').
+  Never use paths like '/Users/...' — those are host paths and do not exist.
+  The shell's working directory is already the repo root; do NOT 'cd' to
+  any absolute path.
+
   Your job: understand the defect, identify root cause, and prepare the
   workflow to execute a safe, targeted fix. Downstream phases enforce your
   declarations mechanically, so be precise.

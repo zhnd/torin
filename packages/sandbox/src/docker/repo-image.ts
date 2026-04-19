@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import Docker from 'dockerode';
 import { log } from '../logger.js';
@@ -19,7 +20,8 @@ import {
 import { DockerSandbox } from './sandbox.js';
 import { detectSetup, type SetupPlan } from './setup-detector.js';
 
-const LOCK_ROOT = process.env.TORIN_LOCK_ROOT ?? '/var/lib/torin/locks';
+const LOCK_ROOT =
+  process.env.TORIN_LOCK_ROOT ?? path.join(os.tmpdir(), 'torin', 'locks');
 const RAW_REPO = 'torin/repo-raw';
 const SETUP_REPO = 'torin/repo';
 const TIER_RAW = 'raw';
@@ -394,7 +396,7 @@ async function withLock(key: string, fn: () => Promise<void>): Promise<void> {
 // enough for the rare case of two workers racing; not meant to be strictly
 // correct under kernel crash.
 async function acquireHostLock(key: string): Promise<() => void> {
-  await fs.mkdir(LOCK_ROOT, { recursive: true }).catch(() => {});
+  await fs.mkdir(LOCK_ROOT, { recursive: true });
   const lockPath = path.join(LOCK_ROOT, `${key}.lock`);
   const start = Date.now();
   const timeoutMs = 30 * 60 * 1000;

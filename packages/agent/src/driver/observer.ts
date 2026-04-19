@@ -5,6 +5,12 @@ export interface AgentObserver {
   collect(): AgentObservation;
 }
 
+/**
+ * Build an observer that turns Agent-SDK message stream events into the
+ * flat `ObservedEvent[]` + `AgentCost` shape torin's observability layer
+ * expects. Each tool-call becomes an event; the terminal `result` message
+ * produces the cost breakdown.
+ */
 export function createObserver(
   stage: string,
   agentName: string
@@ -18,11 +24,7 @@ export function createObserver(
 
       if (msg.type === 'assistant') {
         const betaMessage = msg.message as {
-          content?: Array<{
-            type: string;
-            name?: string;
-            input?: unknown;
-          }>;
+          content?: Array<{ type: string; name?: string; input?: unknown }>;
         };
         if (betaMessage.content) {
           for (const block of betaMessage.content) {
@@ -46,10 +48,7 @@ export function createObserver(
           const result = msg as {
             total_cost_usd: number;
             duration_ms: number;
-            usage: {
-              input_tokens: number;
-              output_tokens: number;
-            };
+            usage: { input_tokens: number; output_tokens: number };
             modelUsage: Record<
               string,
               { inputTokens: number; outputTokens: number; costUSD: number }
@@ -57,7 +56,6 @@ export function createObserver(
           };
 
           const modelName = Object.keys(result.modelUsage)[0] ?? 'unknown';
-
           cost = {
             totalCostUsd: result.total_cost_usd,
             inputTokens: result.usage.input_tokens,

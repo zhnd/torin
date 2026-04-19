@@ -15,6 +15,12 @@ import type { SandboxState } from '@torin/sandbox';
 import type * as activities from '../activities/index.js';
 import { SANDBOX_TASK_QUEUE } from '../task-queues.js';
 import { buildPrBody } from '../utils/build-pr-body.js';
+import { renderViolations } from '../utils/precondition-check.js';
+import {
+  type AttemptMemo,
+  buildRetryFeedback,
+  memoFromAttempt,
+} from '../utils/retry-feedback.js';
 
 // ── Activity proxies ─────────────────────────────────────────────────
 // main         — DB / GitHub API; high concurrency
@@ -262,7 +268,17 @@ export async function resolveDefectWorkflow(
       }
     );
 
-    return oracle.mode === 'none' ? null : oracle;
+    if (oracle.mode === 'none') return null;
+
+    // REPRODUCE's agent writes the oracle file but does not commit it.
+    // Commit it here so IMPLEMENT starts from a clean working tree — the
+    // precondition guardrail's `requireCleanTree` check would otherwise
+    // flag this uncommitted file as a violation on every retry.
+    if (oracle.filePath) {
+      await sandboxInfra.commitOracleActivity(sandboxState, oracle.filePath);
+    }
+
+    return oracle;
   }
 
   async function implementWithFilter(
@@ -271,7 +287,10 @@ export async function resolveDefectWorkflow(
     analysis: DefectAnalysis,
     oracle: ReproductionOracle | null
   ): Promise<ResolutionResult> {
-    let feedback: string | undefined;
+    let reviewerFeedback: string | undefined;
+    // Reflexion-style bounded memory across all IMPLEMENT rounds — includes
+    // both FILTER-fail retries (inner) and HITL-reject retries (outer).
+    const attemptMemos: AttemptMemo[] = [];
 
     for (let round = 0; round < MAX_REVIEW_ROUNDS; round++) {
       // Inner: implement with automated-filter retry loop
@@ -285,15 +304,36 @@ export async function resolveDefectWorkflow(
         innerRound < MAX_IMPLEMENT_ROUNDS;
         innerRound++
       ) {
+        // SWE-agent-style precondition guardrail: block retries where the
+        // previous attempt left the working tree in a broken state.
+        let preconditionViolations: string[] | undefined;
+        if (attemptMemos.length > 0) {
+          const pre = await sandboxInfra.checkPreconditionsActivity({
+            state: sandboxState,
+            scopeDeclaration: analysis.scopeDeclaration,
+            requiredFiles: oracle?.filePath ? [oracle.filePath] : undefined,
+            requireCleanTree: true,
+          });
+          if (!pre.clean) {
+            preconditionViolations = renderViolations(pre);
+          }
+        }
+
+        const feedback = buildRetryFeedback({
+          previousAttempts: attemptMemos,
+          reviewerFeedback,
+          preconditionViolations,
+        });
+
         await main.saveTaskEventsActivity(
           input.taskId,
           [
             {
               stage: 'implement',
               event:
-                innerRound === 0
+                innerRound === 0 && round === 0
                   ? 'Implementation started'
-                  : `Implementation retry #${innerRound}`,
+                  : `Implementation retry #${attemptMemos.length}`,
               level: 'info',
               timestamp: new Date().toISOString(),
             },
@@ -308,7 +348,7 @@ export async function resolveDefectWorkflow(
             input.defectDescription,
             analysis,
             oracle,
-            feedback
+            feedback || undefined
           );
         resolution = result;
 
@@ -363,7 +403,28 @@ export async function resolveDefectWorkflow(
         if (filterResult.overallPassed) {
           break;
         }
-        feedback = filterResult.failureSummary;
+        // Accumulate Reflexion-style memo before the next IMPLEMENT retry.
+        attemptMemos.push(
+          memoFromAttempt({
+            attemptNum: attemptMemos.length + 1,
+            resolution: {
+              summary: result.summary,
+              filesChanged: result.filesChanged,
+              diff: result.diff,
+            },
+            failureSummary: filterResult.failureSummary,
+            failedChecks: [
+              filterResult.oracleCheck,
+              filterResult.regressionCheck,
+              filterResult.buildCheck,
+              filterResult.lintCheck,
+              filterResult.bootCheck,
+            ]
+              .filter((c): c is NonNullable<typeof c> => c !== undefined)
+              .filter((c) => !c.passed)
+              .map((c) => ({ name: c.name, output: c.output })),
+          })
+        );
       }
 
       if (!resolution || !filterResult || !filterResult.overallPassed) {
@@ -381,6 +442,7 @@ export async function resolveDefectWorkflow(
         testsPassed: resolution.testsPassed,
         testOutput: resolution.testOutput,
         previewUrl: filterResult.previewUrl,
+        reproductionOracle: oracle ?? undefined,
         filterChecks: {
           oracle: filterResult.oracleCheck,
           regression: filterResult.regressionCheck,
@@ -402,7 +464,23 @@ export async function resolveDefectWorkflow(
           autoApproved: false,
         };
       }
-      feedback = decision.feedback;
+      // HITL rejected: record the last successful-by-filter attempt as a
+      // memo (it passed filter but the human wasn't satisfied), then loop
+      // with the reviewer's freeform feedback fed through buildRetryFeedback.
+      if (resolution && filterResult) {
+        attemptMemos.push(
+          memoFromAttempt({
+            attemptNum: attemptMemos.length + 1,
+            resolution: {
+              summary: resolution.summary,
+              filesChanged: resolution.filesChanged,
+              diff: resolution.diff,
+            },
+            failureSummary: `Rejected by reviewer: ${decision.feedback ?? '(no comment)'}`,
+          })
+        );
+      }
+      reviewerFeedback = decision.feedback;
       await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
     }
 

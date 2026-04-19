@@ -2,17 +2,25 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { Sandbox } from '@torin/sandbox';
 import { z } from 'zod/v4';
 
+/**
+ * Build the MCP server that exposes sandbox operations to a query(). The
+ * server name is `sandbox`, so tools are addressable from prompts as
+ * `mcp__sandbox__bash`, `mcp__sandbox__read_file`, etc.
+ *
+ * Each tool descriptor is explicit about the container-vs-host distinction
+ * to prevent the model from accidentally using host paths.
+ */
 export function createSandboxMcpServer(sandbox: Sandbox) {
   const bash = tool(
     'bash',
-    'Execute a shell command in the sandbox repository. Use for exploring files, running scripts, checking dependencies, etc.',
+    'Execute a shell command inside the sandbox container. The working directory is ALREADY the repository root — do NOT prepend `cd /Users/...` or any other host path; those paths do not exist in the sandbox. Just run commands directly (e.g. `npm test`, `git status`). Use the optional `cwd` parameter only to run in a subdirectory of the repo.',
     {
       command: z.string().describe('The shell command to execute'),
       cwd: z
         .string()
         .optional()
         .describe(
-          'Optional working directory (absolute path or relative to repo root). Defaults to the repo root.'
+          'Optional subdirectory of the repo. Leave unset to run at repo root (most common).'
         ),
       timeoutMs: z
         .number()
@@ -46,7 +54,7 @@ export function createSandboxMcpServer(sandbox: Sandbox) {
 
   const readFile = tool(
     'read_file',
-    'Read the contents of a file in the repository.',
+    'Read a file from the sandboxed repository. Paths are relative to the repo root (e.g. `src/cart.js`). Do not pass absolute host paths.',
     {
       path: z.string().describe('File path relative to the repository root'),
     },
@@ -60,7 +68,7 @@ export function createSandboxMcpServer(sandbox: Sandbox) {
 
   const listFiles = tool(
     'list_files',
-    'List files in a directory (up to 3 levels deep).',
+    'List files under a directory in the sandboxed repo (up to 3 levels deep). Paths are relative to the repo root. Use "." for root. Do not pass host paths.',
     {
       path: z
         .string()
@@ -85,7 +93,7 @@ export function createSandboxMcpServer(sandbox: Sandbox) {
 
   const writeFile = tool(
     'write_file',
-    'Write content to a file in the repository. Creates parent directories if needed.',
+    'Write content to a file in the sandboxed repo. Creates parent directories if needed. Paths are relative to the repo root. Do not pass absolute host paths.',
     {
       path: z.string().describe('File path relative to the repository root'),
       content: z.string().describe('The full file content to write'),
