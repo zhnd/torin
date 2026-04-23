@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { registerAuthRoutes } from './auth.routes.js';
+import { registerGraphQLWebSocket } from './graphql-ws.routes.js';
 import { registerGraphQLRoutes } from './graphql.routes.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -7,4 +8,5 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   await registerAuthRoutes(app);
   await registerGraphQLRoutes(app);
+  await registerGraphQLWebSocket(app);
 }
