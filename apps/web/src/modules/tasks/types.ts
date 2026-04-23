@@ -7,6 +7,37 @@ import type {
   TaskStage,
 } from '@torin/domain';
 
+// ── tasks list types ──────────────────────────────────────────
+
+export type TaskListStatusFilter =
+  | 'all'
+  | 'AWAITING_REVIEW'
+  | 'RUNNING'
+  | 'PENDING'
+  | 'COMPLETED'
+  | 'FAILED';
+
+export interface TaskListRow {
+  id: string;
+  type: string;
+  status: string;
+  currentStage: string | null;
+  stages: Record<string, string> | null;
+  totalCostUsd: number | null;
+  durationMs: number | null;
+  createdAt: string;
+  updatedAt: string;
+  project: { id: string; name: string } | null;
+}
+
+export interface FilterEntry {
+  key: TaskListStatusFilter;
+  label: string;
+}
+
+// ── task detail / shared types (used by task-detail-pane until
+//    that module is extracted) ──────────────────────────────────
+
 export interface StageDetail {
   status: StageStatus;
   duration: string;
@@ -42,6 +73,12 @@ export interface TimelineEvent {
   agent?: string;
   tool?: string;
   details?: string;
+  /** Typed event type (new-format field). Legacy rows carry `'Log'`. */
+  eventType?: string;
+  payload?: unknown;
+  stageExecutionId?: string | null;
+  attemptExecutionId?: string | null;
+  spanId?: string | null;
 }
 
 export interface LogEntry {
@@ -51,16 +88,16 @@ export interface LogEntry {
   message: string;
 }
 
+export interface DiffHunk {
+  header: string;
+  lines: { type: 'add' | 'remove' | 'context'; content: string }[];
+}
+
 export interface DiffFile {
   path: string;
   additions: number;
   deletions: number;
   hunks: DiffHunk[];
-}
-
-export interface DiffHunk {
-  header: string;
-  lines: { type: 'add' | 'remove' | 'context'; content: string }[];
 }
 
 export interface CostBreakdown {
@@ -93,6 +130,156 @@ export interface HealthAlert {
     | 'error';
   severity: 'critical' | 'warning' | 'info';
   message: string;
+}
+
+// ── Phase 2 observability view types ──────────────────────
+
+export interface ToolCallView {
+  id: string;
+  agentTurnId: string | null;
+  toolUseId: string;
+  name: string;
+  input: unknown;
+  output: string | null;
+  outputTruncatedAt: number | null;
+  success: boolean | null;
+  errorText: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  spanId: string;
+}
+
+export interface TurnView {
+  id: string;
+  turnIndex: number;
+  role: string;
+  textContent: string | null;
+  textTruncatedAt: number | null;
+  toolUseCount: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  startedAt: string;
+}
+
+export interface AgentInvocationView {
+  id: string;
+  agentName: string;
+  model: string;
+  status: string;
+  errorText: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  totalCostUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  turns: TurnView[];
+  toolCalls: ToolCallView[];
+  spanId: string;
+}
+
+export interface SampleView {
+  id: string;
+  attemptExecutionId: string;
+  sampleIndex: number;
+  branch: string;
+  summary: string;
+  filesChanged: string[];
+  patch: string;
+  additions: number;
+  deletions: number;
+  filterPassed: boolean;
+  filterChecks: unknown;
+  criticApproved: boolean | null;
+  criticScore: number | null;
+  criticConcerns: unknown;
+  selected: boolean;
+  createdAt: string;
+}
+
+export interface ReviewView {
+  id: string;
+  stageExecutionId: string;
+  decisionType: string;
+  action: string;
+  feedback: string | null;
+  userId: string | null;
+  createdAt: string;
+}
+
+export interface AttemptView {
+  id: string;
+  attemptNumber: number;
+  triggerKind: string;
+  triggerPayload: unknown;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  spanId: string;
+  invocations: AgentInvocationView[];
+  samples: SampleView[];
+}
+
+export interface StageView {
+  id: string;
+  stageName: string;
+  order: number;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  spanId: string;
+  attempts: AttemptView[];
+  reviews: ReviewView[];
+}
+
+export interface RetrospectiveView {
+  id: string;
+  summary: string | null;
+  bottlenecks: Array<{ stageName: string; durationMs: number; reason: string }>;
+  recommendations: Array<{
+    kind: string;
+    text: string;
+    references?: string[];
+  }>;
+  riskFactors: Array<{ severity: string; text: string }>;
+  stats: {
+    totalDurationMs: number;
+    perStage: Record<
+      string,
+      {
+        durationMs: number;
+        toolCallCount: number;
+        agentInvocationCount: number;
+        costUsd: number;
+        inputTokens: number;
+        outputTokens: number;
+      }
+    >;
+    retryCount: number;
+    sampleCount: number;
+    reviewCount: number;
+    totalCostUsd: number;
+    toolHistogram: Record<string, number>;
+  };
+  model: string | null;
+  costUsd: number | null;
+  createdAt: string;
+}
+
+export interface ExecutionView {
+  id: string;
+  workflowKind: string;
+  workflowVersion: number;
+  traceId: string;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  stages: StageView[];
+  retrospective: RetrospectiveView | null;
 }
 
 export interface TaskDetail {
@@ -131,4 +318,11 @@ export interface TaskDetail {
     description: string;
     timestamp: string;
   }[];
+
+  // New observability surfaces (all optional — older tasks without
+  // Phase 2 telemetry simply have empty arrays / null).
+  currentExecution: ExecutionView | null;
+  executions: ExecutionView[];
+  samples: SampleView[];
+  reviews: ReviewView[];
 }
