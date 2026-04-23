@@ -47,7 +47,7 @@ export const CRITIC_RESOLUTION_SYSTEM_PROMPT = dedent`
 
   ## Response format
 
-  Respond with ONLY a JSON object (no markdown):
+  When done, call the submit_result tool with your review. The tool validates the schema. Fields:
   {
     "approve": boolean,
     "score": 0..1,                    // 1.0 = ideal, 0.0 = should be rejected
@@ -122,7 +122,6 @@ export function buildCriticUserPrompt(
     ---
 
     Review the patch. Read additional repo context if needed to judge
-    edge cases or behavior changes. Respond with ONLY JSON matching the
-    schema in your instructions.
+    edge cases or behavior changes. When done, call the submit_result tool.
   `;
 }

@@ -41,7 +41,7 @@ export const REPRODUCE_TEST_SYSTEM_PROMPT = dedent`
   4. If it passes, the test is wrong — rewrite it.
   5. Return the result.
 
-  Respond with ONLY a JSON object (no markdown):
+  When done, call the submit_result tool. Fields:
   {
     "mode": "test-framework",
     "filePath": "relative/path/to/new.test.ts",
@@ -79,7 +79,7 @@ export const REPRODUCE_SCRIPT_SYSTEM_PROMPT = dedent`
   - You MUST run the script on HEAD and confirm it exits non-zero BEFORE
     returning.
 
-  Respond with ONLY a JSON object:
+  When done, call the submit_result tool. Fields:
   {
     "mode": "verify-script",
     "filePath": ".torin/verify.sh",
@@ -120,7 +120,7 @@ export const REPRODUCE_WEB_SYSTEM_PROMPT = dedent`
     - Each step is a concrete user action or observation.
     - Steps must be deterministic and replayable against the preview URL.
 
-  Respond with ONLY a JSON object.
+  When done, call the submit_result tool. Fields:
 
   For component-test mode (preferred when possible):
   {
@@ -158,7 +158,6 @@ export function buildReproduceUserPrompt(analysis: DefectAnalysis): string {
     ## Test Strategy from analysis
     ${analysis.testStrategy}
 
-    Generate the reproduction artifact now. Respond with ONLY a JSON
-    object matching the schema in your instructions.
+    Generate the reproduction artifact now. When done, call the submit_result tool with your result.
   `;
 }

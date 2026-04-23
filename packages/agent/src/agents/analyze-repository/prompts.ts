@@ -20,7 +20,7 @@ export const ANALYZE_SYSTEM_PROMPT = dedent`
 
   Use the provided sandbox tools to explore the codebase. Be thorough but efficient — focus on understanding the project structure and key patterns rather than reading every file.
 
-  IMPORTANT: Your final response MUST be a single JSON object (no markdown, no extra text) with this exact structure:
+  IMPORTANT: When you have completed your analysis, call the submit_result tool with your findings. The tool enforces the exact schema — if your input is invalid you will see the validation error and must fix and retry. Do NOT output a raw JSON object in your text response. The fields to provide:
   {
     "summary": "Brief overview of the project",
     "techStack": ["list", "of", "technologies"],
@@ -31,5 +31,5 @@ export const ANALYZE_SYSTEM_PROMPT = dedent`
 `;
 
 export const ANALYZE_USER_PROMPT = dedent`
-  Analyze this repository. After exploring, respond with ONLY a JSON object matching the schema in your instructions. No markdown, no explanation — just the JSON.
+  Analyze this repository. After exploring, call the submit_result tool with your findings.
 `;

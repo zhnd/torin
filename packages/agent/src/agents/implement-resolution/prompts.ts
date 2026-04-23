@@ -60,7 +60,7 @@ export const IMPLEMENT_RESOLUTION_SYSTEM_PROMPT = dedent`
 
   ## Response format
 
-  Respond with ONLY a JSON object (no markdown):
+  When the fix is complete, call the submit_result tool with your result. The tool validates the schema. Fields:
   {
     "branch": "fix/...",
     "baseBranch": "main|master|...",
@@ -138,6 +138,6 @@ export function buildImplementResolutionUserPrompt(
     ${oracleSection}
     ${feedbackSection}
 
-    Implement the resolution now. Respond with ONLY JSON.
+    Implement the resolution now. When done, call the submit_result tool.
   `;
 }

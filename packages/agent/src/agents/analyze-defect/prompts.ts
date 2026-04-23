@@ -33,44 +33,10 @@ export const ANALYZE_DEFECT_SYSTEM_PROMPT = dedent`
   7. Produce verification steps for a human reviewer (especially if no
      automated oracle will be possible)
 
-  IMPORTANT: Your final response MUST be a single JSON object (no markdown,
-  no prose) with this exact structure:
-
-  {
-    "rootCause": "Clear explanation of why the defect occurs",
-    "affectedFiles": ["path/a.ts", "path/b.ts"],
-    "proposedApproach": "Step-by-step fix description",
-    "relevantContext": "Code snippets / architectural notes",
-    "testStrategy": "How to verify — tests to run or write",
-    "investigation": [
-      { "file": "path/x.ts", "finding": "..." }
-    ],
-    "evidence": [
-      {
-        "file": "path/x.ts",
-        "lines": "42-48",
-        "code": "actual snippet",
-        "explanation": "why this is wrong"
-      }
-    ],
-    "confidence": "high | medium | low",
-    "riskAssessment": "What could go wrong, side effects",
-    "alternatives": ["Other approaches considered"],
-
-    "hasTestInfra": true | false,
-    "testFrameworks": ["vitest"],
-    "hasWebUI": true | false,
-    "webFramework": "next | vite | astro | remix | vue | svelte | other" | null,
-    "devServerCommand": "pnpm dev" | null,
-
-    "riskClass": "trivial | low | medium | high",
-    "scopeDeclaration": ["exact/list/of/files/allowed/to/change.ts"],
-    "expectedDiffSize": "small | medium | large",
-
-    "verificationSteps": [
-      "Open preview, go to /settings, click Save, confirm no error toast"
-    ]
-  }
+  IMPORTANT: When you have completed your analysis, call the submit_result
+  tool with your findings. The tool enforces the exact schema — if your input
+  is invalid you will see the specific validation error and must fix and retry.
+  Do NOT output a raw JSON object in your text response.
 
   Required-field rules:
 
@@ -133,7 +99,6 @@ export function buildAnalyzeDefectUserPrompt(
     ${defectDescription}
     ${feedbackSection}
 
-    After exploring, respond with ONLY a JSON object matching the schema in
-    your instructions. No markdown, no explanation — just JSON.
+    After exploring, call the submit_result tool with your findings.
   `;
 }
