@@ -79,7 +79,7 @@ export function LogsTab({ logs }: LogsTabProps) {
       </div>
 
       <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
-        <div className="max-h-[500px] overflow-y-auto">
+        <div className="max-h-125 overflow-y-auto">
           <table className="w-full text-xs font-mono">
             <tbody>
               {filtered.map((log) => (

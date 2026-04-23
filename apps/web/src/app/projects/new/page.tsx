@@ -1,5 +1,5 @@
-import { ProjectNewPage } from '@/modules/projects/project-new-page';
+import { ProjectNew } from '@/modules/project-new';
 
 export default function Page() {
-  return <ProjectNewPage />;
+  return <ProjectNew />;
 }

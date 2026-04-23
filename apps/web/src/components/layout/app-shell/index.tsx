@@ -1,22 +1,37 @@
-import { AppHeader } from '@/components/layout/app-header';
 import { LeftSidebar } from '@/components/layout/left-sidebar';
 
 interface AppShellProps {
   children: React.ReactNode;
+  /**
+   * When true (default), the main region scrolls and pages handle their
+   * own padding. When false, pages fill the full height with no padding
+   * — used for task detail's 2-column internal scroll layout.
+   */
+  scroll?: boolean;
 }
 
-export function AppShell({ children }: AppShellProps) {
+/**
+ * App shell: sidebar + main. No top header bar — pages render their own
+ * page-level header inside the main region. Theme toggle lives in the
+ * sidebar's footer next to the user row.
+ */
+export function AppShell({ children, scroll = true }: AppShellProps) {
   return (
-    <div className="h-screen overflow-hidden flex flex-col">
+    <div className="flex h-screen flex-col overflow-hidden">
       <LeftSidebar />
-      <div className="lg:pl-56 flex flex-col flex-1 min-h-0">
-        <AppHeader />
-        <main className="flex-1 min-h-0 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex min-h-0 flex-1 flex-col lg:pl-56">
+        <main
+          className={
+            scroll
+              ? 'min-h-0 flex-1 overflow-auto'
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden'
+          }
+        >
           {children}
         </main>
       </div>
       {/* Bottom nav spacer for mobile */}
-      <div className="h-16 lg:hidden shrink-0" />
+      <div className="h-16 shrink-0 lg:hidden" />
     </div>
   );
 }

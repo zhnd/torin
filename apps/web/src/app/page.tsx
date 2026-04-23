@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { Dashboard } from '@/modules/dashboard';
 
 export default function Page() {
-  redirect('/tasks');
+  return <Dashboard />;
 }

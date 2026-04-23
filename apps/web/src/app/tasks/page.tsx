@@ -1,10 +1,5 @@
-import { AppShell } from '@/components/layout/app-shell';
-import { TasksPage } from '@/modules/tasks/tasks-page';
+import { Tasks } from '@/modules/tasks';
 
 export default function Page() {
-  return (
-    <AppShell>
-      <TasksPage />
-    </AppShell>
-  );
+  return <Tasks />;
 }

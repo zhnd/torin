@@ -137,7 +137,7 @@ function StageTooltip({
             </p>
           )}
           {detail.summary && (
-            <p className="max-w-[200px] truncate">{detail.summary}</p>
+            <p className="max-w-50 truncate">{detail.summary}</p>
           )}
         </div>
       </div>
@@ -228,7 +228,7 @@ export function StageTrack({
           {i < TASK_STAGES.length - 1 && (
             <div
               className={cn(
-                'h-[2px] w-4 rounded-full mt-[3px]',
+                'h-0.5 w-4 rounded-full mt-0.75',
                 lineClass(stages[stage] ?? 'pending')
               )}
             />

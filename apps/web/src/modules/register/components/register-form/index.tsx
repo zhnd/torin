@@ -18,27 +18,29 @@ export function RegisterForm() {
   const { form, error, isLoading, onSubmit } = useService();
 
   return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-lg font-semibold">Create account</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Get started with Torin
-        </p>
-      </div>
+    <div>
+      <h2 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">
+        Create an account
+      </h2>
+      <p className="m-0 mt-1.5 mb-7 text-[13px] text-foreground-muted">
+        Start resolving defects in minutes.
+      </p>
 
       <FormErrorAlert message={error} />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3.5">
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel className="text-[11.5px] font-medium text-foreground-muted">
+                  Full name
+                </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Your name"
+                    placeholder="Mira Kapoor"
                     autoComplete="name"
                     {...field}
                   />
@@ -53,11 +55,13 @@ export function RegisterForm() {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel className="text-[11.5px] font-medium text-foreground-muted">
+                  Work email
+                </FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder="[email protected]"
                     autoComplete="email"
                     {...field}
                   />
@@ -72,11 +76,18 @@ export function RegisterForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Password</FormLabel>
+                <div className="flex items-baseline justify-between">
+                  <FormLabel className="text-[11.5px] font-medium text-foreground-muted">
+                    Password
+                  </FormLabel>
+                  <span className="text-[11px] text-foreground-subtle">
+                    Min. 8 characters
+                  </span>
+                </div>
                 <FormControl>
                   <Input
                     type="password"
-                    placeholder="At least 8 characters"
+                    placeholder="••••••••"
                     autoComplete="new-password"
                     {...field}
                   />
@@ -91,11 +102,13 @@ export function RegisterForm() {
             name="confirmPassword"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Confirm password</FormLabel>
+                <FormLabel className="text-[11.5px] font-medium text-foreground-muted">
+                  Confirm password
+                </FormLabel>
                 <FormControl>
                   <Input
                     type="password"
-                    placeholder="Repeat your password"
+                    placeholder="••••••••"
                     autoComplete="new-password"
                     {...field}
                   />
@@ -106,16 +119,16 @@ export function RegisterForm() {
           />
 
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Creating account...' : 'Create account'}
+            {isLoading ? 'One moment…' : 'Create account →'}
           </Button>
         </form>
       </Form>
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p className="mt-5 text-center text-[12.5px] text-foreground-muted">
         Already have an account?{' '}
         <Link
           href="/login"
-          className="text-primary underline hover:no-underline"
+          className="font-medium text-foreground no-underline"
         >
           Sign in
         </Link>

@@ -18,28 +18,30 @@ export function LoginForm() {
   const { form, error, isLoading, onSubmit } = useService();
 
   return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-lg font-semibold">Sign in</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Enter your credentials to continue
-        </p>
-      </div>
+    <div>
+      <h2 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">
+        Sign in to Torin
+      </h2>
+      <p className="m-0 mt-1.5 mb-7 text-[13px] text-foreground-muted">
+        Welcome back.
+      </p>
 
       <FormErrorAlert message={error} />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3.5">
           <FormField
             control={form.control}
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel className="text-[11.5px] font-medium text-foreground-muted">
+                  Work email
+                </FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder="[email protected]"
                     autoComplete="email"
                     {...field}
                   />
@@ -54,11 +56,13 @@ export function LoginForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Password</FormLabel>
+                <FormLabel className="text-[11.5px] font-medium text-foreground-muted">
+                  Password
+                </FormLabel>
                 <FormControl>
                   <Input
                     type="password"
-                    placeholder="Enter your password"
+                    placeholder="••••••••"
                     autoComplete="current-password"
                     {...field}
                   />
@@ -68,19 +72,28 @@ export function LoginForm() {
             )}
           />
 
+          <div className="flex justify-end pb-1 text-[12px]">
+            <Link
+              href="/register"
+              className="text-foreground-muted no-underline hover:text-foreground"
+            >
+              Forgot password?
+            </Link>
+          </div>
+
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign in'}
+            {isLoading ? 'One moment…' : 'Sign in →'}
           </Button>
         </form>
       </Form>
 
-      <p className="text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{' '}
+      <p className="mt-5 text-center text-[12.5px] text-foreground-muted">
+        New here?{' '}
         <Link
           href="/register"
-          className="text-primary underline hover:no-underline"
+          className="font-medium text-foreground no-underline"
         >
-          Sign up
+          Create an account
         </Link>
       </p>
     </div>

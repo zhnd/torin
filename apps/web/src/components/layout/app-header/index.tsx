@@ -1,57 +1,37 @@
 'use client';
 
-import { LogOut, Settings } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { authClient } from '@/libs/auth-client';
-import { useService } from './use-service';
+import { Moon, Sun } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { useEffect, useState } from 'react';
 
+/**
+ * Top header bar — theme toggle on the right. Search/command palette
+ * is intentionally omitted until it's wired to a real backend; pages
+ * own their own filtering UI.
+ */
 export function AppHeader() {
-  const router = useRouter();
-  const { user } = useService();
-  const initials = user?.name?.charAt(0)?.toUpperCase() ?? 'U';
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  async function handleSignOut() {
-    await authClient.signOut();
-    router.push('/login');
-  }
+  const current = mounted ? (theme === 'system' ? resolvedTheme : theme) : null;
+  const next = current === 'dark' ? 'light' : 'dark';
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border px-6">
-      <div />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-accent"
-          >
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-            </Avatar>
-            <span className="hidden sm:inline text-sm text-foreground">
-              {user?.name ?? 'User'}
-            </span>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem onClick={() => router.push('/settings')}>
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background px-5">
+      <div className="flex-1" />
+      <button
+        type="button"
+        onClick={() => setTheme(next)}
+        title="Toggle theme"
+        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[var(--radius-sm)] border-none bg-transparent text-foreground transition-colors hover:bg-surface-2"
+      >
+        {current === 'dark' ? (
+          <Sun className="h-4 w-4" />
+        ) : (
+          <Moon className="h-4 w-4" />
+        )}
+      </button>
     </header>
   );
 }

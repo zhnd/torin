@@ -11,12 +11,15 @@ export const DASHBOARD_QUERY = gql`
       id
       type
       status
-      repositoryUrl
+      currentStage
+      stages
+      totalCostUsd
+      createdAt
+      updatedAt
       project {
         id
         name
       }
-      createdAt
     }
   }
 `;

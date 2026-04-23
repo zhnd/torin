@@ -1,5 +1,5 @@
-import { LoginPage } from '@/modules/login/login-page';
+import { Login } from '@/modules/login';
 
 export default function Page() {
-  return <LoginPage />;
+  return <Login />;
 }

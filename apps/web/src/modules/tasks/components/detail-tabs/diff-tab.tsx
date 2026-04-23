@@ -13,7 +13,7 @@ export function DiffTab({ files }: DiffTabProps) {
   const active = files.find((f) => f.path === selectedFile);
 
   return (
-    <div className="flex gap-4 min-h-[400px]">
+    <div className="flex gap-4 min-h-100">
       {/* File list */}
       <div className="w-56 shrink-0 rounded-lg border border-border bg-card overflow-hidden">
         <div className="px-3 py-2 border-b border-border">
@@ -62,7 +62,7 @@ export function DiffTab({ files }: DiffTabProps) {
                 {active.path}
               </span>
             </div>
-            <div className="overflow-auto max-h-[500px]">
+            <div className="overflow-auto max-h-125">
               {active.hunks.map((hunk) => (
                 <div key={hunk.header}>
                   <div className="bg-muted/50 px-3 py-1 text-xs font-mono text-muted-foreground border-b border-border/50">

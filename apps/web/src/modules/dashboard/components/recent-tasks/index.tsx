@@ -55,7 +55,7 @@ export function RecentTasks({ tasks }: RecentTasksProps) {
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
               </TableCell>
-              <TableCell className="max-w-[200px] truncate font-mono text-xs">
+              <TableCell className="max-w-50 truncate font-mono text-xs">
                 {task.repositoryUrl}
               </TableCell>
               <TableCell>
