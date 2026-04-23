@@ -49,7 +49,8 @@ export class ReviewTaskService {
     const client = await createTemporalClient();
     const handle = client.workflow.getHandle(task.workflowId);
     await handle.signal('reviewDecision', {
-      action,
+      decisionType: 'binary',
+      action: action as 'approve' | 'reject',
       feedback: feedback ?? undefined,
     });
 

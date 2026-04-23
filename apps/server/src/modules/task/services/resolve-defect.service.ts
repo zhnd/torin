@@ -56,6 +56,7 @@ export class ResolveDefectService {
           projectId: project.id,
           repositoryUrl: project.repositoryUrl,
           defectDescription,
+          userId: user.id,
         },
       ],
     });

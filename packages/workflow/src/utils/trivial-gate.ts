@@ -61,6 +61,40 @@ export interface AutoApproveDecision {
   reason?: string;
 }
 
+/**
+ * Pre-implement gate: skip the analyze-stage HITL when the LLM self-
+ * classified the defect as `trivial` AND the operator opted in via env.
+ *
+ * This is a thinner check than `isAutoApprovable` (which runs post-
+ * implement and inspects critic + diff). Here we only have the
+ * analysis output to go on; the conservative late gate still stands
+ * for the HITL-final review.
+ */
+export function shouldAutoApproveAnalysis(
+  analysis: DefectAnalysis,
+  envFlag: string | undefined
+): AutoApproveDecision {
+  if (envFlag !== 'true') {
+    return {
+      autoApprove: false,
+      reason: 'TORIN_AUTO_APPROVE_TRIVIAL not set to true',
+    };
+  }
+  if (analysis.riskClass !== 'trivial') {
+    return {
+      autoApprove: false,
+      reason: `riskClass is '${analysis.riskClass}', only 'trivial' qualifies`,
+    };
+  }
+  if (analysis.scopeDeclaration.length === 0) {
+    return {
+      autoApprove: false,
+      reason: 'no scopeDeclaration — skipping is unsafe without a fence',
+    };
+  }
+  return { autoApprove: true };
+}
+
 export function isAutoApprovable(
   analysis: DefectAnalysis,
   resolution: ResolutionResult,

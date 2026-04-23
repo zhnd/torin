@@ -14,48 +14,79 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── Enums ──────────────────────────────────────────────────────
+
 enum AuthMethod {
   NONE
   TOKEN
   SSH_KEY
 }
 
+enum AuthProvider {
+  GITHUB
+  GITLAB
+  GITEA
+}
+
+enum TaskType {
+  ANALYZE_REPOSITORY
+  RESOLVE_DEFECT
+}
+
+enum TaskStatus {
+  PENDING
+  RUNNING
+  AWAITING_REVIEW
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ExecutionStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum StageStatus {
+  PENDING
+  RUNNING
+  AWAITING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum AgentInvocationStatus {
+  RUNNING
+  SUCCESS
+  ERROR
+}
+
+enum DecisionType {
+  BINARY
+  TERNARY
+}
+
+// ── Auth (better-auth) ─────────────────────────────────────────
+
 model User {
-  id            String    @id
+  id            String        @id
   name          String
   email         String
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean       @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   sessions      Session[]
   accounts      Account[]
   projects      Project[]
   tasks         Task[]
+  reviews       HumanReview[]
 
   @@unique([email])
   @@map("user")
-}
-
-model Project {
-  id                   String     @id @default(cuid())
-  name                 String
-  repositoryUrl        String
-  authMethod           AuthMethod @default(NONE)
-  encryptedCredentials String?
-  // Preview configuration — when set, web fixes start a dev server during
-  // FILTER to catch boot errors and expose a URL for HITL visual review.
-  previewCommand       String?
-  previewPort          Int?
-  previewReadyPattern  String?
-  userId               String
-  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tasks                Task[]
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
-
-  @@index([userId])
-  @@map("project")
 }
 
 model Session {
@@ -106,47 +137,345 @@ model Verification {
   @@map("verification")
 }
 
+// ── Projects ───────────────────────────────────────────────────
+
+model Project {
+  id                   String        @id @default(cuid())
+  name                 String
+  repositoryUrl        String
+  authMethod           AuthMethod    @default(NONE)
+  authProvider         AuthProvider  @default(GITHUB)
+  encryptedCredentials String?
+  // Structured per-workflow config. Shape discriminated by key at read time.
+  // e.g. { preview: { command, port, readyPattern } }
+  workflowConfig       Json?
+  // Legacy preview fields — superseded by workflowConfig.preview; kept
+  // nullable for one release so running code can still read them.
+  previewCommand       String?
+  previewPort          Int?
+  previewReadyPattern  String?
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks                Task[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([userId])
+  @@map("project")
+}
+
+// ── Tasks ──────────────────────────────────────────────────────
+
 model Task {
-  id            String   @id @default(cuid())
-  type          String   @default("ANALYZE_REPOSITORY")
-  status        String   @default("PENDING")
+  id            String     @id @default(cuid())
+  type          TaskType   @default(ANALYZE_REPOSITORY)
+  status        TaskStatus @default(PENDING)
   repositoryUrl String
-  result        Json?
   error         String?
-  workflowId    String?
   userId        String?
-  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user          User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   projectId     String?
-  project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  currentStage  String?
-  stages        Json?
+  project       Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  // Denormalized aggregates — source of truth is AgentInvocation rows.
+  // Kept here for fast list queries; recomputed on invocation write.
   totalCostUsd  Float?
   inputTokens   Int?
   outputTokens  Int?
   durationMs    Int?
   model         String?
+
+  // Legacy columns — superseded by WorkflowExecution / StageExecution /
+  // AgentInvocation / TaskResult. Kept nullable for one release window so
+  // backfill can run and clients can read while migrating.
+  result        Json?
+  workflowId    String?
+  currentStage  String?
+  stages        Json?
   costBreakdown Json?
+
+  // New relations
+  executions    WorkflowExecution[]
   events        TaskEvent[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  samples       ResolutionSample[]
+  reviews       HumanReview[]
+  resultRecord  TaskResult?
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@index([userId])
   @@index([projectId])
+  @@index([status])
+  @@index([type])
   @@map("task")
 }
 
-model TaskEvent {
-  id        String   @id @default(cuid())
-  taskId    String
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  stage     String
-  event     String
-  level     String   @default("info")
-  agent     String?
-  tool      String?
-  details   String?
-  timestamp DateTime @default(now())
+// ── Layer 0: Workflow registry ────────────────────────────────
 
+model WorkflowDefinition {
+  id          String          @id @default(cuid())
+  kind        String          @unique
+  displayName String
+  version     Int             @default(1)
+  stages      WorkflowStage[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("workflow_definition")
+}
+
+model WorkflowStage {
+  id                   String             @id @default(cuid())
+  workflowDefinitionId String
+  workflowDefinition   WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id], onDelete: Cascade)
+  name                 String
+  label                String
+  order                Int
+  allowsRetry          Boolean            @default(true)
+  allowsHitl           Boolean            @default(false)
+  config               Json?
+
+  @@unique([workflowDefinitionId, name])
+  @@index([workflowDefinitionId, order])
+  @@map("workflow_stage")
+}
+
+// ── Layer 1: Execution telemetry (OTel-shaped) ────────────────
+
+model WorkflowExecution {
+  id                 String             @id @default(cuid())
+  taskId             String
+  task               Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workflowKind       String
+  workflowVersion    Int                @default(1)
+  traceId            String             @unique
+  temporalWorkflowId String?
+  status             ExecutionStatus    @default(RUNNING)
+  startedAt          DateTime           @default(now())
+  endedAt            DateTime?
+  durationMs         Int?
+  stages             StageExecution[]
+  events             TaskEvent[]
+  retrospective      Retrospective?
+
+  @@index([taskId])
+  @@index([workflowKind, status])
+  @@map("workflow_execution")
+}
+
+model StageExecution {
+  id                  String             @id @default(cuid())
+  workflowExecutionId String
+  workflowExecution   WorkflowExecution  @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
+  stageName           String
+  order               Int
+  status              StageStatus        @default(PENDING)
+  spanId              String             @unique
+  parentSpanId        String
+  startedAt           DateTime           @default(now())
+  endedAt             DateTime?
+  durationMs          Int?
+  attempts            AttemptExecution[]
+  reviews             HumanReview[]
+  events              TaskEvent[]
+
+  @@index([workflowExecutionId, order])
+  @@map("stage_execution")
+}
+
+model AttemptExecution {
+  id               String             @id @default(cuid())
+  stageExecutionId String
+  stageExecution   StageExecution     @relation(fields: [stageExecutionId], references: [id], onDelete: Cascade)
+  attemptNumber    Int
+  triggerKind      String
+  triggerPayload   Json?
+  spanId           String             @unique
+  parentSpanId     String
+  status           StageStatus        @default(RUNNING)
+  startedAt        DateTime           @default(now())
+  endedAt          DateTime?
+  durationMs       Int?
+  invocations      AgentInvocation[]
+  samples          ResolutionSample[]
+  events           TaskEvent[]
+
+  @@unique([stageExecutionId, attemptNumber])
+  @@map("attempt_execution")
+}
+
+model AgentInvocation {
+  id                 String                @id @default(cuid())
+  attemptExecutionId String
+  attemptExecution   AttemptExecution      @relation(fields: [attemptExecutionId], references: [id], onDelete: Cascade)
+  agentName          String
+  model              String
+  status             AgentInvocationStatus @default(RUNNING)
+  errorText          String?
+  spanId             String                @unique
+  parentSpanId       String
+  startedAt          DateTime              @default(now())
+  endedAt            DateTime?
+  durationMs         Int?
+  totalCostUsd       Float?
+  inputTokens        Int?
+  outputTokens       Int?
+  turns              AgentTurn[]
+  toolCalls          ToolCall[]
+
+  @@index([attemptExecutionId])
+  @@map("agent_invocation")
+}
+
+model AgentTurn {
+  id                String          @id @default(cuid())
+  agentInvocationId String
+  agentInvocation   AgentInvocation @relation(fields: [agentInvocationId], references: [id], onDelete: Cascade)
+  turnIndex         Int
+  role              String
+  textContent       String?
+  textTruncatedAt   Int?
+  toolUseCount      Int             @default(0)
+  inputTokens       Int?
+  outputTokens      Int?
+  startedAt         DateTime        @default(now())
+  toolCalls         ToolCall[]
+
+  @@unique([agentInvocationId, turnIndex])
+  @@map("agent_turn")
+}
+
+model ToolCall {
+  id                String          @id @default(cuid())
+  agentInvocationId String
+  agentInvocation   AgentInvocation @relation(fields: [agentInvocationId], references: [id], onDelete: Cascade)
+  agentTurnId       String?
+  agentTurn         AgentTurn?      @relation(fields: [agentTurnId], references: [id], onDelete: SetNull)
+  toolUseId         String
+  name              String
+  input             Json
+  output            String?
+  outputTruncatedAt Int?
+  success           Boolean?
+  errorText         String?
+  spanId            String          @unique
+  parentSpanId      String
+  startedAt         DateTime        @default(now())
+  endedAt           DateTime?
+  durationMs        Int?
+
+  @@index([agentInvocationId, startedAt])
+  @@index([name])
+  @@map("tool_call")
+}
+
+// ── Layer 2: Domain events (typed outbox) ─────────────────────
+
+model TaskEvent {
+  id                  String             @id @default(cuid())
+  taskId              String
+  task                Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  eventType           String             @default("Log")
+  payload             Json?
+  workflowExecutionId String?
+  workflowExecution   WorkflowExecution? @relation(fields: [workflowExecutionId], references: [id], onDelete: SetNull)
+  stageExecutionId    String?
+  stageExecution      StageExecution?    @relation(fields: [stageExecutionId], references: [id], onDelete: SetNull)
+  attemptExecutionId  String?
+  attemptExecution    AttemptExecution?  @relation(fields: [attemptExecutionId], references: [id], onDelete: SetNull)
+  traceId             String?
+  spanId              String?
+  occurredAt          DateTime           @default(now())
+
+  // Legacy free-form columns — still populated during transition so
+  // existing query paths (web event rendering) keep working. New code
+  // should read eventType + payload; legacy columns will be dropped
+  // after the backfill + UI cutover.
+  stage               String?
+  event               String?
+  level               String?
+  agent               String?
+  tool                String?
+  details             String?
+  timestamp           DateTime           @default(now())
+
+  @@index([taskId, occurredAt])
+  @@index([eventType])
+  @@index([workflowExecutionId])
   @@index([taskId, timestamp])
   @@map("task_event")
+}
+
+// ── Layer 3: Domain aggregates (workflow-specific) ────────────
+
+model ResolutionSample {
+  id                 String           @id @default(cuid())
+  taskId             String
+  task               Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  attemptExecutionId String
+  attemptExecution   AttemptExecution @relation(fields: [attemptExecutionId], references: [id], onDelete: Cascade)
+  sampleIndex        Int
+  branch             String
+  summary            String
+  filesChanged       Json
+  patch              String
+  additions          Int              @default(0)
+  deletions          Int              @default(0)
+  filterPassed       Boolean          @default(false)
+  filterChecks       Json?
+  criticApproved     Boolean?
+  criticScore        Float?
+  criticConcerns     Json?
+  selected           Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+
+  @@index([taskId])
+  @@index([attemptExecutionId, sampleIndex])
+  @@map("resolution_sample")
+}
+
+model HumanReview {
+  id               String         @id @default(cuid())
+  taskId           String
+  task             Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  stageExecutionId String
+  stageExecution   StageExecution @relation(fields: [stageExecutionId], references: [id], onDelete: Cascade)
+  decisionType     DecisionType   @default(BINARY)
+  action           String
+  feedback         String?
+  userId           String?
+  user             User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt        DateTime       @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([stageExecutionId])
+  @@map("human_review")
+}
+
+model Retrospective {
+  id                  String            @id @default(cuid())
+  workflowExecutionId String            @unique
+  workflowExecution   WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
+  summary             String?
+  bottlenecks         Json              @default("[]")
+  recommendations     Json              @default("[]")
+  riskFactors         Json              @default("[]")
+  stats               Json              @default("{}")
+  model               String?
+  costUsd             Float?
+  createdAt           DateTime          @default(now())
+
+  @@map("retrospective")
+}
+
+model TaskResult {
+  id           String   @id @default(cuid())
+  taskId       String   @unique
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workflowKind String
+  payload      Json
+  createdAt    DateTime @default(now())
+
+  @@map("task_result")
 }

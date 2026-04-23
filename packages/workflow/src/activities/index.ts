@@ -8,6 +8,10 @@ export { createSandboxActivity } from './create-sandbox.js';
 export { criticResolutionActivity } from './critic-resolution.js';
 export { destroySandboxActivity } from './destroy-sandbox.js';
 export { filterCandidateActivity } from './filter-candidate.js';
+export {
+  getWorkflowConfigActivity,
+  type WorkflowConfig,
+} from './get-workflow-config.js';
 export { implementResolutionActivity } from './implement-resolution.js';
 export { pushBranchActivity } from './push-branch.js';
 export { renameBranchActivity } from './rename-branch.js';

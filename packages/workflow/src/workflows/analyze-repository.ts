@@ -1,4 +1,7 @@
-import { proxyActivities } from '@temporalio/workflow';
+import {
+  CancellationScope,
+  proxyActivities,
+} from '@temporalio/workflow';
 import type { AnalyzeRepositoryInput } from '@torin/domain';
 import type { SandboxState } from '@torin/sandbox';
 import type * as activities from '../activities/index.js';
@@ -66,8 +69,12 @@ export async function analyzeRepositoryWorkflow(
       message
     );
   } finally {
-    if (sandboxState) {
-      await sandboxInfra.destroySandboxActivity(sandboxState);
-    }
+    // Non-cancellable so a cancel arriving during shutdown can't leak
+    // the sandbox container (Temporal-standard cleanup pattern).
+    await CancellationScope.nonCancellable(async () => {
+      if (sandboxState) {
+        await sandboxInfra.destroySandboxActivity(sandboxState);
+      }
+    });
   }
 }

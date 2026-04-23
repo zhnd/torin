@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import { loggerConfig } from '@torin/shared';
 import Fastify from 'fastify';
 import { registerRoutes } from './infrastructure/routes/index.js';
+import { seedWorkflowDefinitions } from './infrastructure/workflow-seed.js';
 import { log } from './logger.js';
 
 async function main(): Promise<void> {
@@ -14,6 +15,7 @@ async function main(): Promise<void> {
     credentials: true,
   });
 
+  await seedWorkflowDefinitions();
   await registerRoutes(app);
 
   const port = Number(process.env.PORT) || 4000;

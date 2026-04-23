@@ -1,4 +1,5 @@
 import {
+  CancellationScope,
   condition,
   defineSignal,
   proxyActivities,
@@ -25,6 +26,7 @@ import {
 import {
   isAutoApprovable,
   recommendedSampleCount,
+  shouldAutoApproveAnalysis,
 } from '../utils/trivial-gate.js';
 
 // ── Activity proxies ─────────────────────────────────────────────────
@@ -64,12 +66,6 @@ const MAX_REVIEW_ROUNDS = 5;
 // so the agent learns across them.
 const IMPLEMENT_SAMPLES = 3;
 
-// Phase 2c: Auto-approve trivial changes (docs / i18n / comments only)
-// without HITL, subject to the hard-rule gate. Read once at workflow
-// module load — deterministic for replay as long as the worker's env
-// doesn't flip mid-run.
-const AUTO_APPROVE_TRIVIAL_ENV = process.env.TORIN_AUTO_APPROVE_TRIVIAL;
-
 // ── Workflow ─────────────────────────────────────────────────────────
 
 export async function resolveDefectWorkflow(
@@ -90,6 +86,10 @@ export async function resolveDefectWorkflow(
   }
 
   await main.updateTaskStatusActivity(input.taskId, 'RUNNING');
+
+  // Env-backed feature flags live behind an activity because the
+  // Temporal workflow sandbox has no `process.env`.
+  const config = await main.getWorkflowConfigActivity();
 
   let sandboxState: SandboxState | undefined;
   try {
@@ -174,9 +174,13 @@ export async function resolveDefectWorkflow(
       message
     );
   } finally {
-    if (sandboxState) {
-      await sandboxInfra.destroySandboxActivity(sandboxState);
-    }
+    // Non-cancellable scope so an external cancel() cannot interrupt
+    // sandbox teardown — standard Temporal cleanup pattern.
+    await CancellationScope.nonCancellable(async () => {
+      if (sandboxState) {
+        await sandboxInfra.destroySandboxActivity(sandboxState);
+      }
+    });
   }
 
   // ── Inner phases ───────────────────────────────────────────────────
@@ -216,6 +220,16 @@ export async function resolveDefectWorkflow(
         observation.cost,
         { stage: 'analysis', status: 'completed' }
       );
+
+      // Trivial auto-approve gate: skip HITL for analyze when the
+      // agent self-classified the defect as trivial and env flag is on.
+      const autoAnalyze = shouldAutoApproveAnalysis(
+        analysis,
+        config.autoApproveTrivial ? 'true' : undefined
+      );
+      if (autoAnalyze.autoApprove) {
+        return analysis;
+      }
 
       await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
         analysis,
@@ -312,13 +326,6 @@ export async function resolveDefectWorkflow(
     for (let round = 0; round < MAX_REVIEW_ROUNDS; round++) {
       type Candidate = {
         resolution: ResolutionResult;
-        /**
-         * Branch name the agent originally created (e.g. fix/memory-leak).
-         * Preserved so we can rename the selected candidate back to this
-         * name before pushing — candidates live under `torin/cand-*`
-         * between sampling and selection to survive `resetSandboxActivity`
-         * and collisions across samples that happen to pick the same slug.
-         */
         originalBranch: string;
         filterResult: Awaited<
           ReturnType<typeof sandboxInfra.filterCandidateActivity>
@@ -327,23 +334,12 @@ export async function resolveDefectWorkflow(
       };
       const candidates: Candidate[] = [];
 
-      // Trivial changes (docs / i18n / string literals) have near-zero
-      // diversity across samples — Best-of-N's premise doesn't apply.
-      // Drop to N=1 for this class, save ~2× tokens. Orthogonal to the
-      // auto-approve gate: even when the gate later rejects and HITL
-      // kicks in, we still avoided the wasted samples.
       const samplesThisRound = recommendedSampleCount(
         analysis,
         IMPLEMENT_SAMPLES
       );
 
-      // Best-of-N sampling: run samplesThisRound samples, collect those
-      // that pass both FILTER and CRITIC as candidates. Failed samples
-      // append memos so later samples diverge.
       for (let sampleId = 1; sampleId <= samplesThisRound; sampleId++) {
-        // Reset sandbox between samples so each starts from a clean
-        // base. First sample of the first round can skip (sandbox is
-        // fresh from createSandbox).
         if (sampleId > 1 || round > 0) {
           const reset = await sandboxInfra.resetSandboxActivity({
             state: sandboxState,
@@ -352,9 +348,6 @@ export async function resolveDefectWorkflow(
           detectedBaseBranch = reset.baseBranch;
         }
 
-        // SWE-agent-style precondition guardrail: block samples when the
-        // previous attempt left an unexpected artifact (e.g., deleted a
-        // test file the reset should restore — sanity check only).
         let preconditionViolations: string[] | undefined;
         if (attemptMemos.length > 0) {
           const pre = await sandboxInfra.checkPreconditionsActivity({
@@ -449,7 +442,6 @@ export async function resolveDefectWorkflow(
         );
 
         if (!filterResult.overallPassed) {
-          // Accumulate Reflexion-style memo before the next IMPLEMENT retry.
           attemptMemos.push(
             memoFromAttempt({
               attemptNum: attemptMemos.length + 1,
@@ -509,10 +501,6 @@ export async function resolveDefectWorkflow(
         );
 
         if (criticReview.approve) {
-          // Preserve this sample's branch under a unique name so the next
-          // `resetSandboxActivity` (which deletes fix/*) and subsequent
-          // `git checkout -B` cannot overwrite it. The original branch
-          // name is restored at selection time.
           const candidateBranch = `torin/cand-${round}-${sampleId}`;
           await sandboxInfra.renameBranchActivity(
             sandboxState,
@@ -561,9 +549,6 @@ export async function resolveDefectWorkflow(
         return diffSize(a.resolution) - diffSize(b.resolution);
       });
       const selected = candidates[0];
-      // Restore the agent's original branch name on the winning candidate
-      // so downstream push + PR use the expected slug. Losers stay under
-      // their `torin/cand-*` names; sandbox is destroyed at workflow end.
       await sandboxInfra.renameBranchActivity(
         sandboxState,
         selected.resolution.branch,
@@ -589,14 +574,12 @@ export async function resolveDefectWorkflow(
         { stage: 'critic', status: 'completed' }
       );
 
-      // Phase 2c: trivial auto-approve. Hard-rule gate: only docs/i18n,
-      // diff < 20 lines, critic clean, no tests modified, env flag on.
-      // Conservative by design — false positives ship bugs.
+      // Phase 2c: trivial auto-approve.
       const autoDecision = isAutoApprovable(
         analysis,
         resolution,
         criticReview,
-        AUTO_APPROVE_TRIVIAL_ENV
+        config.autoApproveTrivial ? 'true' : undefined
       );
       if (autoDecision.autoApprove) {
         await main.saveTaskEventsActivity(
@@ -621,7 +604,7 @@ export async function resolveDefectWorkflow(
         };
       }
 
-      // HITL-final review — human sees the critic's concerns too
+      // HITL-final review
       await main.updateTaskStatusActivity(input.taskId, 'AWAITING_REVIEW', {
         resolution,
         diff: resolution.diff,
@@ -653,9 +636,6 @@ export async function resolveDefectWorkflow(
           autoApproved: false,
         };
       }
-      // HITL rejected: record the last successful-by-filter attempt as a
-      // memo (it passed filter but the human wasn't satisfied), then loop
-      // with the reviewer's freeform feedback fed through buildRetryFeedback.
       if (resolution && filterResult) {
         attemptMemos.push(
           memoFromAttempt({

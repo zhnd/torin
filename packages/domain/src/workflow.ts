@@ -14,6 +14,12 @@ export interface ResolveDefectInput {
   projectId: string;
   repositoryUrl: string;
   defectDescription: string;
+  /**
+   * User who initiated the task. Threaded through so HumanReview rows
+   * can be attributed to the reviewer without a round-trip to the
+   * auth layer.
+   */
+  userId?: string;
 }
 
 /**
@@ -44,8 +50,20 @@ export interface PullRequestResult {
   number: number;
 }
 
-export interface ReviewDecision {
-  action: 'approve' | 'reject';
-  /** Freeform reviewer comment. */
-  feedback?: string;
-}
+/**
+ * HITL decision as it flows through the Temporal `reviewSignal`.
+ * `decisionType` selects the action vocabulary — binary for the legacy
+ * approve/reject gate, ternary for future request-changes flows. Both
+ * variants carry optional reviewer feedback.
+ */
+export type ReviewDecision =
+  | {
+      decisionType: 'binary';
+      action: 'approve' | 'reject';
+      feedback?: string;
+    }
+  | {
+      decisionType: 'ternary';
+      action: 'approve' | 'request-changes' | 'reject';
+      feedback?: string;
+    };
