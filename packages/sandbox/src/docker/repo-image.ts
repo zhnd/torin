@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { GitHostProvider } from '@torin/githost';
 import Docker from 'dockerode';
 import { log } from '../logger.js';
 import type { Source } from '../types.js';
-import { CREDENTIAL_HELPER } from './credential-broker.js';
+import { buildCredentialHelper } from './credential-broker.js';
 import {
   BUILDER_LABEL,
   BUILDER_LABEL_VALUE,
@@ -28,7 +29,8 @@ const TIER_RAW = 'raw';
 const TIER_SETUP = 'setup';
 
 interface EnsureRepoImageOptions {
-  githubToken?: string;
+  gitToken?: string;
+  gitProvider?: GitHostProvider;
   rawMaxAgeMs?: number;
   setupMaxAgeMs?: number;
   baseImage?: string;
@@ -191,7 +193,12 @@ async function coldBuildRaw(
   rawTag: string,
   options: EnsureRepoImageOptions
 ): Promise<void> {
-  const builder = await startBuilder(docker, baseImage, options.githubToken);
+  const builder = await startBuilder(
+    docker,
+    baseImage,
+    options.gitToken,
+    options.gitProvider
+  );
   try {
     await gitConfigCredentialHelper(builder);
     const cloneResult = await builder.exec(
@@ -218,7 +225,12 @@ async function refreshRaw(
   // Rebuild from the stale tier-1, not from sandbox-base — this is the
   // whole point of the refresh path. git fetch + reset is seconds, not
   // minutes.
-  const builder = await startBuilder(docker, rawTag, options.githubToken);
+  const builder = await startBuilder(
+    docker,
+    rawTag,
+    options.gitToken,
+    options.gitProvider
+  );
   try {
     await gitConfigCredentialHelper(builder);
     const fetchResult = await builder.exec(
@@ -284,7 +296,8 @@ async function buildSetup(
 async function startBuilder(
   docker: Docker,
   image: string,
-  githubToken?: string
+  gitToken?: string,
+  gitProvider?: GitHostProvider
 ): Promise<DockerSandbox> {
   const container = await docker.createContainer({
     Image: image,
@@ -304,7 +317,8 @@ async function startBuilder(
     docker,
     container,
     workingDirectory: DEFAULT_WORKING_DIRECTORY,
-    githubToken,
+    gitToken,
+    gitProvider,
   });
 }
 
@@ -312,7 +326,7 @@ async function gitConfigCredentialHelper(
   sandbox: DockerSandbox
 ): Promise<void> {
   await sandbox.exec(
-    `git config --global 'credential.helper' ${shellArg(CREDENTIAL_HELPER)}`,
+    `git config --global 'credential.helper' ${shellArg(buildCredentialHelper(sandbox.gitProvider))}`,
     { cwd: DEFAULT_WORKING_DIRECTORY, timeoutMs: 5_000 }
   );
 }

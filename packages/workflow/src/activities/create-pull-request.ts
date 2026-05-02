@@ -1,8 +1,7 @@
-import { Octokit } from '@octokit/rest';
 import { prisma } from '@torin/database';
 import type { PullRequestResult } from '@torin/domain';
-import { decrypt, getEncryptionKey, parseGitHubUrl } from '@torin/shared';
 import { log } from '../logger.js';
+import { gitClientFor } from '../utils/git-context.js';
 
 export async function createPullRequestActivity(
   projectId: string,
@@ -16,26 +15,12 @@ export async function createPullRequestActivity(
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
   });
-  if (!project.encryptedCredentials) {
-    throw new Error('Project has no credentials configured');
-  }
-
-  const token = decrypt(project.encryptedCredentials, getEncryptionKey());
-  const { owner, repo } = parseGitHubUrl(project.repositoryUrl);
-
-  const octokit = new Octokit({ auth: token });
-  const { data } = await octokit.pulls.create({
-    owner,
-    repo,
-    head,
-    base,
-    title,
-    body,
-  });
+  const client = gitClientFor(project);
+  const result = await client.createPullRequest({ head, base, title, body });
 
   log.info(
-    { prUrl: data.html_url, prNumber: data.number },
+    { prUrl: result.url, prNumber: result.number, provider: client.provider },
     'Pull request created'
   );
-  return { url: data.html_url, number: data.number };
+  return result;
 }

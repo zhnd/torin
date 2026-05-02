@@ -300,6 +300,8 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                       defaultValues={{
                         name: project.name,
                         repositoryUrl: project.repositoryUrl,
+                        authProvider:
+                          project.authProvider === 'CNB' ? 'CNB' : 'GITHUB',
                         previewCommand: project.previewCommand ?? '',
                         previewPort:
                           project.previewPort != null

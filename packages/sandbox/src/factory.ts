@@ -1,3 +1,4 @@
+import type { GitHostProvider } from '@torin/githost';
 import {
   type ConnectDockerSandboxOptions,
   type CreateDockerSandboxOptions,
@@ -17,19 +18,28 @@ export interface CreateSandboxOptions {
   provider?: SandboxProvider;
   source?: Source;
   env?: Record<string, string>;
-  githubToken?: string;
+  gitToken?: string;
+  /** Git host provider (github | cnb). Defaults to 'github'. */
+  gitProvider?: GitHostProvider;
   gitUser?: GitUser;
   hooks?: SandboxHooks;
   workingDirectory?: string;
   docker?: Omit<
     CreateDockerSandboxOptions,
-    'source' | 'env' | 'githubToken' | 'gitUser' | 'hooks' | 'workingDirectory'
+    | 'source'
+    | 'env'
+    | 'gitToken'
+    | 'gitProvider'
+    | 'gitUser'
+    | 'hooks'
+    | 'workingDirectory'
   >;
 }
 
 export interface ConnectSandboxOptions {
   env?: Record<string, string>;
-  githubToken?: string;
+  gitToken?: string;
+  gitProvider?: GitHostProvider;
   hooks?: SandboxHooks;
 }
 
@@ -47,7 +57,8 @@ export async function createSandbox(
       return createDockerSandbox({
         source: options.source,
         env: options.env,
-        githubToken: options.githubToken,
+        gitToken: options.gitToken,
+        gitProvider: options.gitProvider,
         gitUser: options.gitUser,
         hooks: options.hooks,
         workingDirectory: options.workingDirectory,

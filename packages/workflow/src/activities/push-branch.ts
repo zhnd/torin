@@ -1,7 +1,7 @@
 import { prisma } from '@torin/database';
 import { connectSandbox, type SandboxState } from '@torin/sandbox';
-import { decrypt, getEncryptionKey } from '@torin/shared';
 import { log } from '../logger.js';
+import { gitClientFor } from '../utils/git-context.js';
 
 export async function pushBranchActivity(
   state: SandboxState,
@@ -10,17 +10,17 @@ export async function pushBranchActivity(
 ): Promise<void> {
   log.info({ branch }, 'Pushing branch');
 
-  let githubToken: string | undefined;
-  if (options.projectId) {
-    const project = await prisma.project.findUnique({
-      where: { id: options.projectId },
-    });
-    if (project?.encryptedCredentials) {
-      githubToken = decrypt(project.encryptedCredentials, getEncryptionKey());
-    }
-  }
+  const project = options.projectId
+    ? await prisma.project.findUnique({
+        where: { id: options.projectId },
+      })
+    : null;
+  const client = project?.encryptedCredentials ? gitClientFor(project) : null;
 
-  const sandbox = await connectSandbox(state, { githubToken });
+  const sandbox = await connectSandbox(state, {
+    gitToken: client?.token,
+    gitProvider: client?.provider ?? 'github',
+  });
   const result = await sandbox.exec(`git push origin ${branch}`, {
     timeoutMs: 120_000,
   });

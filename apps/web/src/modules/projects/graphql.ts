@@ -6,6 +6,7 @@ export const PROJECT_FIELDS = gql`
     name
     repositoryUrl
     authMethod
+    authProvider
     hasCredentials
     previewCommand
     previewPort
@@ -45,6 +46,7 @@ export const CREATE_PROJECT = gql`
   mutation CreateProject(
     $name: String!
     $repositoryUrl: String!
+    $authProvider: AuthProvider
     $credentials: String
     $previewCommand: String
     $previewPort: Int
@@ -54,6 +56,7 @@ export const CREATE_PROJECT = gql`
       input: {
         name: $name
         repositoryUrl: $repositoryUrl
+        authProvider: $authProvider
         credentials: $credentials
         previewCommand: $previewCommand
         previewPort: $previewPort
@@ -71,6 +74,7 @@ export const UPDATE_PROJECT = gql`
     $id: String!
     $name: String
     $repositoryUrl: String
+    $authProvider: AuthProvider
     $credentials: String
     $previewCommand: String
     $previewPort: Int
@@ -81,6 +85,7 @@ export const UPDATE_PROJECT = gql`
         id: $id
         name: $name
         repositoryUrl: $repositoryUrl
+        authProvider: $authProvider
         credentials: $credentials
         previewCommand: $previewCommand
         previewPort: $previewPort

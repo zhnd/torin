@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import path from 'node:path/posix';
+import type { GitHostProvider } from '@torin/githost';
 import type Docker from 'dockerode';
 import type {
   ExecOptions,
@@ -20,7 +21,9 @@ export interface DockerSandboxInit {
   container: Docker.Container;
   workingDirectory: string;
   env?: Record<string, string>;
-  githubToken?: string;
+  gitToken?: string;
+  /** Defaults to 'github' for back-compat with existing callers. */
+  gitProvider?: GitHostProvider;
   currentBranch?: string;
   hooks?: SandboxHooks;
   /** Container ports this sandbox knows about. */
@@ -39,6 +42,7 @@ export class DockerSandbox implements Sandbox {
   readonly env?: Record<string, string>;
   readonly currentBranch?: string;
   readonly hooks?: SandboxHooks;
+  readonly gitProvider: GitHostProvider;
 
   private readonly docker: Docker;
   private readonly container: Docker.Container;
@@ -55,7 +59,8 @@ export class DockerSandbox implements Sandbox {
     this.env = init.env;
     this.currentBranch = init.currentBranch;
     this.hooks = init.hooks;
-    this.credentialEnv = buildCredentialEnv(init.githubToken);
+    this.gitProvider = init.gitProvider ?? 'github';
+    this.credentialEnv = buildCredentialEnv(init.gitToken);
     this.declaredPorts = init.ports ?? [];
     this.portMap = init.portMap ?? {};
   }

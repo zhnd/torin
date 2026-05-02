@@ -1,10 +1,18 @@
 import { builder } from '../../../infrastructure/graphql/builder.js';
+import { AuthProviderEnum } from '../project.enums.js';
 
 export const CreateProjectInput = builder.inputType('CreateProjectInput', {
   fields: (t) => ({
     name: t.string({ required: true }),
     repositoryUrl: t.string({ required: true }),
-    credentials: t.string({ description: 'GitHub personal access token' }),
+    authProvider: t.field({
+      type: AuthProviderEnum,
+      description:
+        'Git host the repository lives on. Defaults to GITHUB. Must match the host in repositoryUrl.',
+    }),
+    credentials: t.string({
+      description: 'Personal access token for the selected git host.',
+    }),
     previewCommand: t.string({
       description:
         'Command to start the dev server (e.g. "pnpm dev"). When set, defect-resolution fixes boot-verify + expose a preview URL to the reviewer.',

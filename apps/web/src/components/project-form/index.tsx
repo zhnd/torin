@@ -12,7 +12,21 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import type { ProjectFormValues } from './libs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AUTH_PROVIDER_LABELS,
+  AUTH_PROVIDER_TOKEN_PLACEHOLDERS,
+  AUTH_PROVIDER_URL_PLACEHOLDERS,
+  AUTH_PROVIDERS,
+  type AuthProviderValue,
+  type ProjectFormValues,
+} from './libs';
 import { useService } from './use-service';
 
 interface ProjectFormProps {
@@ -34,6 +48,9 @@ export function ProjectForm({
     projectId,
     defaultValues,
   });
+
+  const provider: AuthProviderValue = form.watch('authProvider') ?? 'GITHUB';
+  const providerLabel = AUTH_PROVIDER_LABELS[provider];
 
   const submitLabel = isLoading
     ? mode === 'create'
@@ -76,6 +93,34 @@ export function ProjectForm({
 
                 <FormField
                   control={form.control}
+                  name="authProvider"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={labelClass}>Git host</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {AUTH_PROVIDERS.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {AUTH_PROVIDER_LABELS[value]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="repositoryUrl"
                   render={({ field }) => (
                     <FormItem>
@@ -84,7 +129,7 @@ export function ProjectForm({
                       </FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="https://github.com/acme/billing-service"
+                          placeholder={AUTH_PROVIDER_URL_PLACEHOLDERS[provider]}
                           {...field}
                         />
                       </FormControl>
@@ -99,7 +144,7 @@ export function ProjectForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className={labelClass}>
-                        GitHub token
+                        {providerLabel} access token
                         <span className="ml-1 font-normal normal-case tracking-normal text-foreground-subtle">
                           — optional
                         </span>
@@ -107,7 +152,9 @@ export function ProjectForm({
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="ghp_xxxxxxxxxxxx"
+                          placeholder={
+                            AUTH_PROVIDER_TOKEN_PLACEHOLDERS[provider]
+                          }
                           {...field}
                         />
                       </FormControl>

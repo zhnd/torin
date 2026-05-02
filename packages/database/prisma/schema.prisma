@@ -26,6 +26,7 @@ enum AuthProvider {
   GITHUB
   GITLAB
   GITEA
+  CNB
 }
 
 enum TaskType {

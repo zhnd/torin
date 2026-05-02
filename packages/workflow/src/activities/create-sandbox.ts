@@ -1,7 +1,8 @@
 import { prisma } from '@torin/database';
+import { defaultBotIdentity } from '@torin/githost';
 import { createSandbox, type SandboxState } from '@torin/sandbox';
-import { decrypt, getEncryptionKey } from '@torin/shared';
 import { log } from '../logger.js';
+import { gitClientFor } from '../utils/git-context.js';
 
 export interface CreateSandboxActivityOptions {
   /** Override the container image. When set, bypasses the repo cache. */
@@ -17,29 +18,29 @@ export async function createSandboxActivity(
 ): Promise<SandboxState> {
   log.info({ repoUrl, branch: options.branch }, 'Creating sandbox');
 
-  let githubToken: string | undefined;
-  if (options.projectId) {
-    const project = await prisma.project.findUniqueOrThrow({
-      where: { id: options.projectId },
-    });
-    if (project.encryptedCredentials) {
-      githubToken = decrypt(project.encryptedCredentials, getEncryptionKey());
-    }
-  }
+  const project = options.projectId
+    ? await prisma.project.findUniqueOrThrow({
+        where: { id: options.projectId },
+      })
+    : null;
+  const client = project?.encryptedCredentials ? gitClientFor(project) : null;
+
+  const gitProvider = client?.provider ?? 'github';
+  const gitToken = client?.token;
+  const gitUser = client?.botIdentity ?? defaultBotIdentity('github');
 
   const sandbox = await createSandbox({
     provider: 'docker',
     source: {
       repo: repoUrl,
-      token: githubToken,
+      token: gitToken,
+      provider: gitProvider,
       branch: options.branch,
       newBranch: options.newBranch,
     },
-    gitUser: {
-      name: 'torin-bot',
-      email: 'torin-bot@users.noreply.github.com',
-    },
-    githubToken,
+    gitUser,
+    gitToken,
+    gitProvider,
     docker: {
       image: options.image,
     },

@@ -1,9 +1,11 @@
-import type { Prisma, PrismaClient } from '@torin/database';
+import type { AuthProvider, Prisma, PrismaClient } from '@torin/database';
+import { parseRepoUrl } from '@torin/githost';
 import { encrypt, getEncryptionKey } from '@torin/shared';
 import type { User } from 'better-auth';
 import {
   NotFoundError,
   UnauthorizedError,
+  ValidationError,
 } from '../../../infrastructure/errors/app-error.js';
 import type { UpdateProjectInput } from '../dto/update-project.input.js';
 
@@ -11,6 +13,11 @@ interface ProjectQuery {
   include?: Prisma.ProjectInclude;
   select?: Prisma.ProjectSelect;
 }
+
+const PROVIDER_TO_PRISMA: Record<'github' | 'cnb', AuthProvider> = {
+  github: 'GITHUB',
+  cnb: 'CNB',
+};
 
 export class UpdateProjectService {
   constructor(private prisma: PrismaClient) {}
@@ -37,6 +44,7 @@ export class UpdateProjectService {
       ...(input.repositoryUrl != null && {
         repositoryUrl: input.repositoryUrl,
       }),
+      ...(input.authProvider != null && { authProvider: input.authProvider }),
       ...(input.previewCommand !== undefined && {
         previewCommand: input.previewCommand,
       }),
@@ -47,6 +55,27 @@ export class UpdateProjectService {
         previewReadyPattern: input.previewReadyPattern,
       }),
     };
+
+    // If either the URL or provider changes, re-validate they agree.
+    const finalUrl = input.repositoryUrl ?? project.repositoryUrl;
+    const finalProvider: AuthProvider =
+      input.authProvider ?? project.authProvider;
+    if (input.repositoryUrl != null || input.authProvider != null) {
+      let parsed: ReturnType<typeof parseRepoUrl>;
+      try {
+        parsed = parseRepoUrl(finalUrl);
+      } catch (err) {
+        throw new ValidationError(
+          err instanceof Error ? err.message : 'Invalid repository URL'
+        );
+      }
+      const expected = PROVIDER_TO_PRISMA[parsed.provider];
+      if (expected !== finalProvider) {
+        throw new ValidationError(
+          `Repository URL host (${parsed.host}) does not match authProvider (${finalProvider})`
+        );
+      }
+    }
 
     if (input.credentials) {
       data.authMethod = 'TOKEN';

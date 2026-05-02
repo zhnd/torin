@@ -13,6 +13,7 @@ export interface ProjectDetailData {
   name: string;
   repositoryUrl: string;
   authMethod: string;
+  authProvider: 'GITHUB' | 'GITLAB' | 'GITEA' | 'CNB';
   hasCredentials: boolean;
   previewCommand?: string | null;
   previewPort?: number | null;

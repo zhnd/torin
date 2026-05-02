@@ -1,4 +1,5 @@
 import { builder } from '../../infrastructure/graphql/builder.js';
+import { AuthProviderEnum } from './project.enums.js';
 
 builder.prismaObject('Project', {
   fields: (t) => ({
@@ -6,6 +7,10 @@ builder.prismaObject('Project', {
     name: t.exposeString('name'),
     repositoryUrl: t.exposeString('repositoryUrl'),
     authMethod: t.exposeString('authMethod'),
+    authProvider: t.field({
+      type: AuthProviderEnum,
+      resolve: (project) => project.authProvider,
+    }),
     hasCredentials: t.boolean({
       resolve: (project) => !!project.encryptedCredentials,
     }),

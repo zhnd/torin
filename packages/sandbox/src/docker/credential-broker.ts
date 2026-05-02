@@ -2,17 +2,24 @@
  * Credential broker for git over HTTPS.
  *
  * The token is never written to .git/config. Instead we register a git
- * credential.helper that reads from the GH_TOKEN env var at command time.
- * Callers inject GH_TOKEN through the exec env (never through getState()),
- * so snapshots/reconnects of the container do not leak the token.
+ * credential.helper that reads from the TORIN_GIT_TOKEN env var at command
+ * time. Callers inject TORIN_GIT_TOKEN through the exec env (never through
+ * getState()), so snapshots/reconnects of the container do not leak the
+ * token.
+ *
+ * The helper script's username differs by provider (GitHub: x-access-token,
+ * cnb.cool: cnb), so the script itself is provider-aware.
  */
-export const CREDENTIAL_HELPER =
-  '!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f';
+import { type GitHostProvider, gitCredentialsFor } from '@torin/githost';
+
+export function buildCredentialHelper(provider: GitHostProvider): string {
+  return gitCredentialsFor(provider).helperScript;
+}
 
 export function buildCredentialEnv(
   token: string | undefined
 ): Record<string, string> {
-  return token ? { GH_TOKEN: token } : {};
+  return token ? { TORIN_GIT_TOKEN: token } : {};
 }
 
 export function redactTokenFromUrl(url: string): string {

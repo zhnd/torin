@@ -1,3 +1,4 @@
+import type { GitHostProvider } from '@torin/githost';
 import Docker from 'dockerode';
 import type { SandboxHooks } from '../interface.js';
 import { log } from '../logger.js';
@@ -6,7 +7,8 @@ import { DockerSandbox } from './sandbox.js';
 
 export interface ConnectDockerSandboxOptions {
   env?: Record<string, string>;
-  githubToken?: string;
+  gitToken?: string;
+  gitProvider?: GitHostProvider;
   hooks?: SandboxHooks;
 }
 
@@ -22,7 +24,8 @@ export async function connectDockerSandbox(
     container,
     workingDirectory: state.workingDirectory,
     env: options.env,
-    githubToken: options.githubToken,
+    gitToken: options.gitToken,
+    gitProvider: options.gitProvider,
     currentBranch: state.currentBranch,
     hooks: options.hooks,
     ports: state.ports,

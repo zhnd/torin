@@ -112,7 +112,10 @@ export async function filterCandidateActivity(
     if (previewCommand && previewPort) {
       const env = project?.encryptedCredentials
         ? {
-            GH_TOKEN: decrypt(project.encryptedCredentials, getEncryptionKey()),
+            TORIN_GIT_TOKEN: decrypt(
+              project.encryptedCredentials,
+              getEncryptionKey()
+            ),
           }
         : undefined;
       const start = Date.now();

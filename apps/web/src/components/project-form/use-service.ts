@@ -26,6 +26,7 @@ export function useService({
     defaultValues: {
       name: defaultValues?.name ?? '',
       repositoryUrl: defaultValues?.repositoryUrl ?? '',
+      authProvider: defaultValues?.authProvider ?? 'GITHUB',
       previewCommand: defaultValues?.previewCommand ?? '',
       previewPort: defaultValues?.previewPort ?? '',
       previewReadyPattern: defaultValues?.previewReadyPattern ?? '',
@@ -49,6 +50,7 @@ export function useService({
       const payload = {
         name: values.name,
         repositoryUrl: values.repositoryUrl,
+        authProvider: values.authProvider,
         credentials,
         previewCommand,
         previewPort,

@@ -1,8 +1,9 @@
+import type { GitHostProvider } from '@torin/githost';
 import Docker from 'dockerode';
 import type { SandboxHooks } from '../interface.js';
 import { log } from '../logger.js';
 import type { GitUser, Source } from '../types.js';
-import { CREDENTIAL_HELPER } from './credential-broker.js';
+import { buildCredentialHelper } from './credential-broker.js';
 import { DEFAULT_WORKING_DIRECTORY, SANDBOX_BASE_IMAGE } from './defaults.js';
 import { ensureRepoImage } from './repo-image.js';
 import { DockerSandbox } from './sandbox.js';
@@ -16,7 +17,9 @@ export interface CreateDockerSandboxOptions {
    */
   image?: string;
   env?: Record<string, string>;
-  githubToken?: string;
+  gitToken?: string;
+  /** Defaults to 'github' when omitted. */
+  gitProvider?: GitHostProvider;
   gitUser?: GitUser;
   hooks?: SandboxHooks;
   workingDirectory?: string;
@@ -41,7 +44,9 @@ export async function createDockerSandbox(
     options.workingDirectory ?? DEFAULT_WORKING_DIRECTORY;
   const memoryMb = options.memoryMb ?? DEFAULT_MEMORY_MB;
   const cpus = options.cpus ?? DEFAULT_CPUS;
-  const githubToken = options.githubToken ?? options.source?.token;
+  const gitToken = options.gitToken ?? options.source?.token;
+  const gitProvider =
+    options.gitProvider ?? options.source?.provider ?? 'github';
 
   // Resolve the image:
   //   1. explicit `image` override → bypass cache (tests, custom setups)
@@ -55,7 +60,8 @@ export async function createDockerSandbox(
     await ensureImage(docker, image);
   } else if (options.source) {
     const result = await ensureRepoImage(docker, options.source, {
-      githubToken,
+      gitToken,
+      gitProvider,
     });
     image = result.imageTag;
     fromCache = true;
@@ -117,7 +123,8 @@ export async function createDockerSandbox(
     container,
     workingDirectory,
     env: options.env,
-    githubToken,
+    gitToken,
+    gitProvider,
     currentBranch: options.source?.newBranch ?? options.source?.branch,
     hooks: options.hooks,
     ports,
@@ -282,7 +289,7 @@ async function configureGitIdentity(
 
 async function registerCredentialHelper(sandbox: DockerSandbox): Promise<void> {
   await sandbox.exec(
-    `git config --global 'credential.helper' ${shellArg(CREDENTIAL_HELPER)}`,
+    `git config --global 'credential.helper' ${shellArg(buildCredentialHelper(sandbox.gitProvider))}`,
     { timeoutMs: 5_000 }
   );
 }
