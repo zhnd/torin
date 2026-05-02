@@ -30,7 +30,7 @@ export async function commitOracleActivity(
   // that as success since the caller only cares that the file is tracked.
   if (!commit.success) {
     const combined = `${commit.stdout}\n${commit.stderr}`;
-    if (/nothing to commit|no changes added/i.test(combined)) {
+    if (/nothing.*to commit|no changes added/i.test(combined)) {
       log.info({ filePath }, 'Oracle file already committed; skipping');
       return;
     }

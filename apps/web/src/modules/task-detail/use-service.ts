@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { GET_TASK, REVIEW_TASK, TASK_UPDATED } from '@/modules/tasks/graphql';
 import { transformTaskToDetail } from '@/modules/tasks/transform';
+import { STAGE_ORDER } from './constants';
 import {
   computeHitlWaited,
   computeStageTimings,
@@ -58,10 +59,10 @@ export function useService({ taskId }: UseServiceInput) {
     if (current) {
       for (const s of current.stages) byName[s.stageName] = s.status;
     } else {
-      const raw = (result.stages ?? {}) as Record<string, string>;
+      const raw = (task?.stages ?? {}) as Record<string, string>;
       Object.assign(byName, raw);
     }
-    return {
+    const map: StageStatusMap = {
       analyze: normalizeStageStatus(byName.analyze ?? byName.analysis),
       reproduce: normalizeStageStatus(byName.reproduce),
       implement: normalizeStageStatus(byName.implement),
@@ -70,7 +71,30 @@ export function useService({ taskId }: UseServiceInput) {
       hitl: normalizeStageStatus(byName.hitl),
       pr: normalizeStageStatus(byName.pr),
     };
-  }, [detail, result]);
+
+    // Web-side derivation: when the task is AWAITING_REVIEW but no
+    // stage is marked 'awaiting' (workflow sets stages to 'completed'
+    // before entering HITL), determine which HITL gate we're at and
+    // mark the correct stage as 'awaiting'.
+    //
+    // Two HITL gates in resolve-defect:
+    //   1. Post-analysis → awaiting on 'analyze'
+    //   2. Post-critic (HITL-final) → awaiting on 'hitl'
+    if (
+      detail?.task.status === 'needs_review' &&
+      !STAGE_ORDER.some((s) => map[s] === 'awaiting')
+    ) {
+      if (map.critic === 'done' || map.critic === 'auto') {
+        // Post-critic: HITL-final gate
+        map.hitl = 'awaiting';
+      } else if (map.analyze === 'done') {
+        // Post-analysis: analysis HITL gate
+        map.analyze = 'awaiting';
+      }
+    }
+
+    return map;
+  }, [detail, task]);
 
   const initialStage = detail
     ? pickInitialStage(detail.task.status, stages)

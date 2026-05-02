@@ -29,10 +29,10 @@ export const REPRODUCE_TEST_SYSTEM_PROMPT = dedent`
   Reuse vs new:
   - If the existing test suite already contains a test that fails for
     this exact defect, prefer reusing it: return mode='test-framework'
-    with filePath pointing to the existing test file, runCommand as the
-    whole-suite command, and confirmedFailing=true after running it.
+    with runCommand as the whole-suite command and confirmedFailing=true.
+    Do NOT set filePath or content — you did not write a new file.
   - Otherwise write a NEW test (co-located or in tests/) using
-    mcp__sandbox__write_file.
+    mcp__sandbox__write_file, and set filePath + content to what you wrote.
 
   Steps:
   1. Read the affected files + a sample existing test to learn conventions.
