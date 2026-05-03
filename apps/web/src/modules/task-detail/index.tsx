@@ -5,14 +5,15 @@ import { CheckTable } from '@/components/common/check-table';
 import { Chip } from '@/components/common/chip';
 import { ConcernCard } from '@/components/common/concern-card';
 import { Dot } from '@/components/common/dot';
+import { Markdown } from '@/components/common/markdown';
 import { ReviewForm } from '@/components/common/review-form';
 import { RiskBadge } from '@/components/common/risk-badge';
 import { SampleRow } from '@/components/common/sample-row';
 import { StageTag } from '@/components/common/stage-tag';
 import {
   DEFAULT_STAGES,
-  StageTrack,
   type StageStatus,
+  StageTrack,
 } from '@/components/common/stage-track';
 import { StatusChip } from '@/components/common/status-chip';
 import { AppShell } from '@/components/layout/app-shell';
@@ -23,19 +24,27 @@ import { TraceView } from './components/trace-view';
 import { VisualView } from './components/visual-view';
 import { DETAIL_TABS, STAGE_LABELS } from './constants';
 import { combineDiffPatches, formatTokens } from './libs';
-import type { DetailTab, StageKey, TaskDetail, TimelineEvent } from './types';
+import type {
+  DetailTab,
+  ReviewView,
+  StageDataMap,
+  StageKey,
+  TaskDetail,
+  TimelineEvent,
+} from './types';
 import { useService } from './use-service';
 
 interface TaskDetailProps {
   taskId: string;
 }
 
+// biome-ignore lint/suspicious/noRedeclare: function and same-named type alias from `./types` are in different namespaces
 export function TaskDetail({ taskId }: TaskDetailProps) {
   const {
     loading,
     detail,
-    result,
     stages,
+    stageData,
     selectedStage,
     setSelectedStage,
     tab,
@@ -133,7 +142,7 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
                 <StageBody
                   stage={selectedStage}
                   status={stages[selectedStage]}
-                  result={result}
+                  stageData={stageData}
                   detail={detail}
                   onReview={submitReview}
                   reviewing={reviewing}
@@ -230,11 +239,15 @@ function DetailTabsBar({
 interface StageBodyProps {
   stage: StageKey;
   status: StageStatus;
-  result: Record<string, unknown>;
+  stageData: StageDataMap;
   detail: TaskDetail;
   onReview: (lane: string, feedback: string) => void;
   reviewing: boolean;
   hitlWaited: string | null;
+}
+
+function latestOutput(stageData: StageDataMap, key: StageKey): unknown {
+  return stageData[key].attempts.at(-1)?.output ?? null;
 }
 
 function StageBody(p: StageBodyProps): React.ReactNode {
@@ -247,33 +260,77 @@ function StageBody(p: StageBodyProps): React.ReactNode {
     case 'analyze':
       return (
         <AnalyzeBody
-          result={p.result}
+          analysis={latestOutput(p.stageData, 'analyze')}
           status={p.status}
           onReview={p.onReview}
           reviewing={p.reviewing}
         />
       );
     case 'reproduce':
-      return <ReproduceBody result={p.result} />;
+      return <ReproduceBody oracle={latestOutput(p.stageData, 'reproduce')} />;
     case 'implement':
-      return <ImplementBody result={p.result} />;
+      return (
+        <ImplementBody
+          payload={
+            (latestOutput(p.stageData, 'implement') ?? {}) as Record<
+              string,
+              unknown
+            >
+          }
+        />
+      );
     case 'filter':
-      return <FilterBody result={p.result} />;
+      return (
+        <FilterBody
+          payload={
+            (latestOutput(p.stageData, 'filter') ?? {}) as Record<
+              string,
+              unknown
+            >
+          }
+        />
+      );
     case 'critic':
-      return <CriticBody result={p.result} />;
-    case 'hitl':
+      return (
+        <CriticBody
+          payload={
+            (latestOutput(p.stageData, 'critic') ?? {}) as Record<
+              string,
+              unknown
+            >
+          }
+        />
+      );
+    case 'hitl': {
+      // HITL gate sits on the CRITIC stage's data (workflow puts the
+      // AWAITING + output payload there). Review history is each
+      // critic attempt's embedded review (drop attempts without one,
+      // e.g. trivial auto-approve).
+      const criticAttempts = p.stageData.critic.attempts;
+      const history = criticAttempts
+        .filter((a) => a.review != null)
+        .map((a) => ({
+          attemptNumber: a.attemptNumber,
+          ...(a.review as NonNullable<typeof a.review>),
+        }));
       return (
         <HitlBody
-          result={p.result}
+          payload={
+            (latestOutput(p.stageData, 'critic') ?? {}) as Record<
+              string,
+              unknown
+            >
+          }
           status={p.status}
           onReview={p.onReview}
           reviewing={p.reviewing}
           waited={p.hitlWaited}
-          reviews={p.detail.reviews}
+          history={history}
         />
       );
+    }
     case 'pr':
-      return <PrBody result={p.result} detail={p.detail} />;
+      return <PrBody pr={latestOutput(p.stageData, 'pr')} detail={p.detail} />;
   }
 }
 
@@ -338,17 +395,17 @@ function Section({
 // ── Stage bodies ─────────────────────────────────────────────────────
 
 function AnalyzeBody({
-  result,
+  analysis,
   status,
   onReview,
   reviewing,
 }: {
-  result: Record<string, unknown>;
+  analysis: unknown;
   status: StageStatus;
   onReview: (lane: string, feedback: string) => void;
   reviewing: boolean;
 }) {
-  const a = (result.analysis ?? {}) as Record<string, unknown>;
+  const a = (analysis ?? {}) as Record<string, unknown>;
   const rootCause = String(a.rootCause ?? '');
   const affected = Array.isArray(a.affectedFiles)
     ? (a.affectedFiles as string[])
@@ -376,7 +433,7 @@ function AnalyzeBody({
       />
       {rootCause && (
         <Section label="Root cause">
-          <p className="m-0 text-[14px] leading-[1.6]">{rootCause}</p>
+          <Markdown>{rootCause}</Markdown>
         </Section>
       )}
       {affected.length > 0 && (
@@ -395,7 +452,7 @@ function AnalyzeBody({
       )}
       {approach && (
         <Section label="Proposed approach">
-          <p className="m-0 text-[13.5px] leading-[1.6]">{approach}</p>
+          <Markdown className="text-[13.5px]">{approach}</Markdown>
         </Section>
       )}
       {isAwaiting && (
@@ -411,11 +468,8 @@ function AnalyzeBody({
   );
 }
 
-function ReproduceBody({ result }: { result: Record<string, unknown> }) {
-  const r = (result.reproductionOracle ?? result.reproduction ?? {}) as Record<
-    string,
-    unknown
-  >;
+function ReproduceBody({ oracle }: { oracle: unknown }) {
+  const r = (oracle ?? {}) as Record<string, unknown>;
   const code = String(r.content ?? r.code ?? '');
   const confirmed = Boolean(r.confirmedFailing ?? r.confirmed);
   const mode = String(r.mode ?? 'verify-script');
@@ -472,23 +526,31 @@ function ReproduceBody({ result }: { result: Record<string, unknown> }) {
   );
 }
 
-function ImplementBody({ result }: { result: Record<string, unknown> }) {
-  const samples = Array.isArray(result.samples)
-    ? (result.samples as Array<{
+function ImplementBody({ payload }: { payload: Record<string, unknown> }) {
+  const resolution = (payload.resolution ?? {}) as Record<string, unknown>;
+  const samples = Array.isArray(resolution.samples)
+    ? (resolution.samples as Array<{
         id: string;
         status: string;
         note?: string;
         time?: string;
       }>)
     : [];
-  const diff = Array.isArray(result.diff)
-    ? (result.diff as Array<{
+  const diff = Array.isArray(resolution.diff)
+    ? (resolution.diff as Array<{
         file: string;
         patch: string;
         additions?: number;
         deletions?: number;
       }>)
-    : [];
+    : Array.isArray(payload.diff)
+      ? (payload.diff as Array<{
+          file: string;
+          patch: string;
+          additions?: number;
+          deletions?: number;
+        }>)
+      : [];
   const [selected, setSelected] = useState<string | null>(
     samples.find((s) => s.status === 'selected')?.id ?? samples[0]?.id ?? null
   );
@@ -554,8 +616,8 @@ function ImplementBody({ result }: { result: Record<string, unknown> }) {
   );
 }
 
-function FilterBody({ result }: { result: Record<string, unknown> }) {
-  const checks = (result.filterChecks ?? {}) as Record<
+function FilterBody({ payload }: { payload: Record<string, unknown> }) {
+  const checks = (payload.filterChecks ?? {}) as Record<
     string,
     { name?: string; passed?: boolean; output?: string }
   >;
@@ -603,8 +665,8 @@ function FilterBody({ result }: { result: Record<string, unknown> }) {
   );
 }
 
-function CriticBody({ result }: { result: Record<string, unknown> }) {
-  const c = (result.criticReview ?? {}) as Record<string, unknown>;
+function CriticBody({ payload }: { payload: Record<string, unknown> }) {
+  const c = (payload.criticReview ?? {}) as Record<string, unknown>;
   const verdict = c.approve ? 'approve' : 'reject';
   const score = typeof c.score === 'number' ? c.score : null;
   const scope = String(c.scopeAssessment ?? 'clean');
@@ -649,6 +711,7 @@ function CriticBody({ result }: { result: Record<string, unknown> }) {
         <Section label={`Concerns (${concerns.length})`}>
           <div className="flex flex-col gap-2">
             {concerns.map((concern, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: critic concerns array is stable for a given review
               <ConcernCard key={i} concern={concern} />
             ))}
           </div>
@@ -663,22 +726,22 @@ function CriticBody({ result }: { result: Record<string, unknown> }) {
 }
 
 function HitlBody({
-  result,
+  payload,
   status,
   onReview,
   reviewing,
   waited,
-  reviews,
+  history,
 }: {
-  result: Record<string, unknown>;
+  payload: Record<string, unknown>;
   status: StageStatus;
   onReview: (lane: string, feedback: string) => void;
   reviewing: boolean;
   waited: string | null;
-  reviews: TaskDetail['reviews'];
+  history: ReviewView[];
 }) {
   const isAwaiting = status === 'awaiting';
-  const resolution = (result.resolution ?? {}) as Record<string, unknown>;
+  const resolution = (payload.resolution ?? {}) as Record<string, unknown>;
   const autoApproved = Boolean(resolution.autoApproved);
   const diff = Array.isArray(resolution.diff)
     ? (resolution.diff as Array<{
@@ -695,7 +758,7 @@ function HitlBody({
     ? (resolution.filesChanged as string[])
     : diff.map((d) => d.file);
 
-  const critic = (result.criticReview ?? {}) as Record<string, unknown>;
+  const critic = (payload.criticReview ?? {}) as Record<string, unknown>;
   const concerns = Array.isArray(critic.concerns)
     ? (critic.concerns as Array<{
         severity: string;
@@ -773,9 +836,7 @@ function HitlBody({
       {(summary || diff.length > 0) && (
         <Section label="Summary of change">
           <div className="rounded-md border border-border bg-surface px-4 py-3.5">
-            {summary && (
-              <p className="m-0 text-[14px] leading-[1.6]">{summary}</p>
-            )}
+            {summary && <Markdown>{summary}</Markdown>}
             {(totalAdditions > 0 ||
               totalDeletions > 0 ||
               filesChanged.length > 0) && (
@@ -812,18 +873,19 @@ function HitlBody({
         <Section label="Critic concerns">
           <div className="flex flex-col gap-2">
             {concerns.map((concern, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: critic concerns array is stable for a given review
               <ConcernCard key={i} concern={concern} />
             ))}
           </div>
         </Section>
       )}
 
-      {reviews.length > 0 && (
+      {history.length > 0 && (
         <Section label="Review history">
           <div className="overflow-hidden rounded-md border border-border bg-surface">
-            {reviews.map((r) => (
+            {history.map((r) => (
               <div
-                key={r.id}
+                key={r.decidedAt}
                 className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0"
               >
                 <span
@@ -846,13 +908,11 @@ function HitlBody({
                       {r.feedback}
                     </p>
                   ) : (
-                    <span className="text-foreground-subtle">
-                      (no comment)
-                    </span>
+                    <span className="text-foreground-subtle">(no comment)</span>
                   )}
                 </div>
                 <span className="shrink-0 font-mono text-[11px] text-foreground-subtle">
-                  {new Date(r.createdAt).toLocaleTimeString()}
+                  {new Date(r.decidedAt).toLocaleTimeString()}
                 </span>
               </div>
             ))}
@@ -881,6 +941,7 @@ function Criterion({ met, label }: { met: boolean; label: string }) {
           background: met ? 'var(--foreground)' : 'var(--border-strong)',
         }}
       >
+        {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative checkmark inside Criterion row, label provides context */}
         <svg width={7} height={7} viewBox="0 0 12 12" fill="none">
           <path
             d="M2 6.5L5 9L10 3.5"
@@ -896,19 +957,13 @@ function Criterion({ met, label }: { met: boolean; label: string }) {
   );
 }
 
-function PrBody({
-  result,
-  detail,
-}: {
-  result: Record<string, unknown>;
-  detail: TaskDetail;
-}) {
-  const pr = (result.pullRequest ?? {}) as {
+function PrBody({ pr, detail }: { pr: unknown; detail: TaskDetail }) {
+  const prData = (pr ?? {}) as {
     url?: string;
     number?: number;
     status?: string;
   };
-  const prUrl = pr.url ?? detail.summary.prUrl;
+  const prUrl = prData.url ?? detail.summary.prUrl;
   const repoLabel = detail.task.repo
     ? detail.task.repo.replace(/^https?:\/\/github\.com\//, '')
     : '';
@@ -942,9 +997,9 @@ function PrBody({
             <Chip key="o" dot="var(--ok)" strong>
               Open
             </Chip>,
-            pr.number ? (
+            prData.number ? (
               <Chip key="n" mono>
-                #{pr.number}
+                #{prData.number}
               </Chip>
             ) : null,
           ].filter(Boolean) as React.ReactNode[]
@@ -960,9 +1015,9 @@ function PrBody({
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-semibold">
               {repoLabel || 'repository'}
-              {pr.number && (
+              {prData.number && (
                 <span className="ml-1 font-medium text-foreground-subtle">
-                  #{pr.number}
+                  #{prData.number}
                 </span>
               )}
             </div>
@@ -993,6 +1048,7 @@ function EventsView({ events }: { events: TimelineEvent[] }) {
     <div className="rounded-md border border-border bg-surface py-1 font-mono text-[11.5px]">
       {events.map((e, i) => (
         <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: events list is append-only and never reordered
           key={i}
           className="flex items-center gap-3 px-3.5 py-1.25 leading-[1.55]"
         >

@@ -7,10 +7,10 @@ export interface DashboardProject {
 export interface DashboardTask {
   id: string;
   status: string;
-  currentStage: string | null;
-  totalCostUsd: number | null;
+  type: string;
+  currentStageKey: string | null;
+  awaiting: { stageKey: string; attemptNumber: number } | null;
   createdAt: string;
   updatedAt: string;
   project: { id: string; name: string } | null;
-  type: string;
 }

@@ -5,32 +5,66 @@ export const TASK_FIELDS = gql`
     id
     type
     status
-    repositoryUrl
+    input
+    triggerSource
     error
     workflowId
-    currentStage
-    stages
-    totalCostUsd
-    inputTokens
-    outputTokens
-    durationMs
-    model
-    costBreakdown
-    result
+    currentStageKey
+    awaiting {
+      stageKey
+      attemptNumber
+    }
     project {
       id
       name
+      repositoryUrl
     }
     createdAt
     updatedAt
+    startedAt
+    completedAt
   }
 `;
 
-// Structured trace tree — loaded on detail view only to avoid
-// pulling tool-output text (up to 32 KB each) into list queries.
+// Detail-view fragment: pulls the folded stage view (per-stage attempts +
+// reviews). The events relation gives the raw rows for the events tab.
 export const TASK_DETAIL_FIELDS = gql`
   fragment TaskDetailFields on Task {
     ...TaskFields
+    stages {
+      key
+      status
+      attempts {
+        attemptNumber
+        status
+        input
+        output
+        error
+        startedAt
+        endedAt
+        durationMs
+        review {
+          action
+          feedback
+          decidedBy
+          decidedAt
+        }
+      }
+    }
+    events {
+      id
+      kind
+      stageKey
+      attemptNumber
+      status
+      input
+      output
+      error
+      decidedBy
+      startedAt
+      endedAt
+      durationMs
+    }
     executions {
       id
       workflowKind
@@ -101,31 +135,6 @@ export const TASK_DETAIL_FIELDS = gql`
               durationMs
             }
           }
-          samples {
-            id
-            sampleIndex
-            branch
-            summary
-            filesChanged
-            patch
-            additions
-            deletions
-            filterPassed
-            filterChecks
-            criticApproved
-            criticScore
-            criticConcerns
-            selected
-            createdAt
-          }
-        }
-        reviews {
-          id
-          decisionType
-          action
-          feedback
-          userId
-          createdAt
         }
       }
       retrospective {
@@ -139,47 +148,6 @@ export const TASK_DETAIL_FIELDS = gql`
         costUsd
         createdAt
       }
-    }
-    samples {
-      id
-      attemptExecutionId
-      sampleIndex
-      branch
-      selected
-      criticScore
-      filterPassed
-      createdAt
-    }
-    reviews {
-      id
-      stageExecutionId
-      action
-      feedback
-      userId
-      createdAt
-    }
-    resultRecord {
-      id
-      workflowKind
-      payload
-    }
-    events {
-      id
-      eventType
-      payload
-      workflowExecutionId
-      stageExecutionId
-      attemptExecutionId
-      traceId
-      spanId
-      occurredAt
-      stage
-      event
-      level
-      agent
-      tool
-      details
-      timestamp
     }
   }
   ${TASK_FIELDS}

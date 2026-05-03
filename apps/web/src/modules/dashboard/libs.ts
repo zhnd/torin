@@ -1,5 +1,5 @@
-import type { ActivityRow } from './components/recent-activity';
 import type { AwaitingReviewRow } from './components/awaiting-review-table';
+import type { ActivityRow } from './components/recent-activity';
 import { ACTIVITY_LIMIT, SEVEN_DAYS_MS, STATUS_EVENT } from './constants';
 import type { DashboardTask } from './types';
 
@@ -33,15 +33,16 @@ export function formatClock(iso: string): string {
 }
 
 /**
- * Build the awaiting-review table rows — sorted oldest first so the
- * most-stale review is at the top.
+ * Build the awaiting-review table rows. A task is "awaiting review" when
+ * its `awaiting` field is non-null (server-derived from any STAGE event
+ * in AWAITING status). Sorted oldest-first so stale reviews bubble up.
  */
 export function buildAwaitingRows(
   tasks: DashboardTask[],
   now: number
 ): AwaitingReviewRow[] {
   return tasks
-    .filter((t) => t.status === 'AWAITING_REVIEW')
+    .filter((t) => t.awaiting != null)
     .slice()
     .sort(
       (a, b) =>
@@ -51,7 +52,7 @@ export function buildAwaitingRows(
       id: t.id,
       title: deriveTitle(t),
       projectName: t.project?.name ?? '—',
-      stage: t.currentStage ?? 'hitl',
+      stage: t.awaiting?.stageKey?.toLowerCase() ?? 'hitl',
       risk: 'medium',
       waited: formatRelative(t.updatedAt, now),
       branch: `torin/${t.id.slice(-8)}`,
@@ -71,7 +72,7 @@ export function buildActivityRows(tasks: DashboardTask[]): ActivityRow[] {
       time: formatClock(t.updatedAt),
       taskId: t.id,
       projectName: t.project?.name ?? '—',
-      stage: t.currentStage ?? 'analyze',
+      stage: t.currentStageKey?.toLowerCase() ?? 'analyze',
       event:
         STATUS_EVENT[t.status as keyof typeof STATUS_EVENT] ??
         t.status.toLowerCase(),
@@ -83,7 +84,7 @@ export function buildActivityRows(tasks: DashboardTask[]): ActivityRow[] {
  * Pure: takes tasks + a `now` clock so callers can be deterministic.
  */
 export function summarize(tasks: DashboardTask[], now: number) {
-  const awaiting = tasks.filter((t) => t.status === 'AWAITING_REVIEW');
+  const awaiting = tasks.filter((t) => t.awaiting != null);
   const active = tasks.filter(
     (t) => t.status === 'RUNNING' || t.status === 'PENDING'
   );
@@ -93,10 +94,6 @@ export function summarize(tasks: DashboardTask[], now: number) {
   const sevenDaysAgo = now - SEVEN_DAYS_MS;
   const recentTasks = tasks.filter(
     (t) => new Date(t.updatedAt).getTime() >= sevenDaysAgo
-  );
-  const weeklyCost = recentTasks.reduce(
-    (sum, t) => sum + (t.totalCostUsd ?? 0),
-    0
   );
   const recentOutcomes = recentTasks.filter(
     (t) => t.status === 'COMPLETED' || t.status === 'FAILED'
@@ -120,7 +117,9 @@ export function summarize(tasks: DashboardTask[], now: number) {
     queuedCount,
     completedCount: completed.length,
     failedCount: failed.length,
-    weeklyCost,
+    // Cost rollup deferred to the agent_log work; tasks no longer carry
+    // cost aggregates on the row.
+    weeklyCost: 0,
     recentTaskCount: recentTasks.length,
     recentOutcomeCount: recentOutcomes.length,
     successRate,

@@ -1,6 +1,5 @@
 import type { StageStatus } from '@/components/common/stage-track';
-import { STAGE_ORDER } from './constants';
-import type { StageKey, TimelineEvent } from './types';
+import type { TimelineEvent } from './types';
 
 /** Normalize backend stage status strings to internal `StageStatus`. */
 export function normalizeStageStatus(s: string | undefined): StageStatus {
@@ -22,23 +21,6 @@ export function normalizeStageKey(stage: string): string {
   if (stage === 'plan') return 'analyze';
   if (stage === 'test') return 'filter';
   return stage;
-}
-
-/**
- * Pick which stage the detail pane should focus on by default.
- * Priority: awaiting > running > most-recent done > first.
- */
-export function pickInitialStage(
-  taskStatus: string,
-  stages: Record<StageKey, StageStatus>
-): StageKey {
-  for (const s of STAGE_ORDER) if (stages[s] === 'awaiting') return s;
-  for (const s of STAGE_ORDER) if (stages[s] === 'running') return s;
-  for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
-    const s = STAGE_ORDER[i];
-    if (stages[s] === 'done' || stages[s] === 'auto') return s;
-  }
-  return taskStatus === 'completed' ? 'pr' : 'analyze';
 }
 
 /** Aggregate per-stage durations from observed events for StageTrack timings. */

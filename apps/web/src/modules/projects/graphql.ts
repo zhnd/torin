@@ -34,7 +34,6 @@ export const GET_PROJECT = gql`
         id
         type
         status
-        repositoryUrl
         createdAt
       }
     }

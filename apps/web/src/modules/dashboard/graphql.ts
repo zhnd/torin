@@ -11,9 +11,11 @@ export const DASHBOARD_QUERY = gql`
       id
       type
       status
-      currentStage
-      stages
-      totalCostUsd
+      currentStageKey
+      awaiting {
+        stageKey
+        attemptNumber
+      }
       createdAt
       updatedAt
       project {

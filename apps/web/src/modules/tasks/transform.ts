@@ -20,22 +20,20 @@ import type {
 
 // ── API response shapes ─────────────────────────────────────
 
+// task_event row as returned by server (matches Prisma TaskEvent).
 interface ApiEvent {
   id: string;
-  eventType?: string;
-  payload?: unknown;
-  stage?: string | null;
-  event?: string | null;
-  level?: string | null;
-  agent?: string | null;
-  tool?: string | null;
-  details?: string | null;
-  timestamp: string;
-  occurredAt?: string | null;
-  workflowExecutionId?: string | null;
-  stageExecutionId?: string | null;
-  attemptExecutionId?: string | null;
-  spanId?: string | null;
+  kind: string; // 'STAGE' | 'REVIEW'
+  stageKey: string; // 'ANALYSIS' | 'REPRODUCE' | ...
+  attemptNumber: number;
+  status: string;
+  input?: unknown;
+  output?: unknown;
+  error?: string | null;
+  decidedBy?: string | null;
+  startedAt: string;
+  endedAt?: string | null;
+  durationMs?: number | null;
 }
 
 interface ApiToolCall {
@@ -83,35 +81,6 @@ interface ApiInvocation {
   toolCalls: ApiToolCall[];
 }
 
-interface ApiSample {
-  id: string;
-  attemptExecutionId?: string;
-  sampleIndex: number;
-  branch: string;
-  summary?: string;
-  filesChanged?: string[];
-  patch?: string;
-  additions?: number;
-  deletions?: number;
-  filterPassed: boolean;
-  filterChecks?: unknown;
-  criticApproved?: boolean | null;
-  criticScore: number | null;
-  criticConcerns?: unknown;
-  selected: boolean;
-  createdAt: string;
-}
-
-interface ApiReview {
-  id: string;
-  stageExecutionId?: string;
-  decisionType?: string;
-  action: string;
-  feedback: string | null;
-  userId: string | null;
-  createdAt: string;
-}
-
 interface ApiAttempt {
   id: string;
   attemptNumber: number;
@@ -123,7 +92,6 @@ interface ApiAttempt {
   endedAt: string | null;
   durationMs: number | null;
   invocations: ApiInvocation[];
-  samples: ApiSample[];
 }
 
 interface ApiStage {
@@ -137,7 +105,6 @@ interface ApiStage {
   endedAt: string | null;
   durationMs: number | null;
   attempts: ApiAttempt[];
-  reviews: ApiReview[];
 }
 
 interface ApiRetrospective {
@@ -170,30 +137,11 @@ interface ApiTask {
   id: string;
   type: string;
   status: string;
-  repositoryUrl: string;
-  result?: Record<string, unknown> | null;
   error?: string | null;
   workflowId?: string | null;
-  currentStage?: string | null;
-  stages?: Record<string, string> | null;
-  totalCostUsd?: number | null;
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  durationMs?: number | null;
-  model?: string | null;
-  costBreakdown?: Array<{
-    stage: string;
-    inputTokens: number;
-    outputTokens: number;
-    cost: number;
-    duration: string;
-    model: string;
-  }> | null;
   events?: ApiEvent[];
   executions?: ApiExecution[];
-  samples?: ApiSample[];
-  reviews?: ApiReview[];
-  project?: { id: string; name: string } | null;
+  project?: { id: string; name: string; repositoryUrl?: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -214,18 +162,15 @@ function mapStatus(status: string): ExecutionStatus {
       return 'queued';
     case 'RUNNING':
       return 'running';
-    case 'AWAITING_REVIEW':
-      return 'needs_review';
     case 'COMPLETED':
       return 'completed';
     case 'FAILED':
+    case 'CANCELLED':
       return 'failed';
     default:
       return 'queued';
   }
 }
-
-// ── Stage details from StageExecution or legacy event scan ──
 
 const KNOWN_STAGES: TaskStage[] = [
   'analysis',
@@ -235,127 +180,22 @@ const KNOWN_STAGES: TaskStage[] = [
   'pr',
 ];
 
-function buildStageDetailsFromExecution(exec: ApiExecution | null): {
-  stagesMap: Record<TaskStage, StageStatus>;
-  stageDetails: Record<TaskStage, StageDetail>;
-} {
-  const stagesMap = {} as Record<TaskStage, StageStatus>;
-  const stageDetails = {} as Record<TaskStage, StageDetail>;
-  if (!exec) return { stagesMap, stageDetails };
-  for (const s of exec.stages) {
-    const key = s.stageName as TaskStage;
-    const status = normalizeStatus(s.status);
-    stagesMap[key] = status;
-    const toolCallCount = s.attempts.reduce(
-      (sum, a) =>
-        sum +
-        a.invocations.reduce((acc, inv) => acc + inv.toolCalls.length, 0),
-      0
-    );
-    stageDetails[key] = {
-      status,
-      duration: s.durationMs ? formatDuration(s.durationMs) : '—',
-      toolCalls: toolCallCount,
-      summary: '',
-    };
-  }
-  return { stagesMap, stageDetails };
-}
-
-function buildStageDetailsFromLegacy(
-  stages: Record<string, string> | null | undefined,
-  events: ApiEvent[]
-): {
-  stagesMap: Record<TaskStage, StageStatus>;
-  stageDetails: Record<TaskStage, StageDetail>;
-} {
-  const stagesMap = {} as Record<TaskStage, StageStatus>;
-  const stageDetails = {} as Record<TaskStage, StageDetail>;
-
-  for (const stage of KNOWN_STAGES) {
-    const status = normalizeStatus(stages?.[stage] ?? 'pending');
-    stagesMap[stage] = status;
-
-    const stageEvents = events.filter(
-      (e) => (e.stage ?? e.stageExecutionId) === stage
-    );
-    const toolCalls = stageEvents.filter((e) => e.tool).length;
-
-    let duration = '—';
-    if (stageEvents.length >= 2) {
-      const first = new Date(
-        stageEvents[0].occurredAt ?? stageEvents[0].timestamp
-      ).getTime();
-      const last = new Date(
-        stageEvents[stageEvents.length - 1].occurredAt ??
-          stageEvents[stageEvents.length - 1].timestamp
-      ).getTime();
-      duration = formatDuration(last - first);
-    }
-
-    const summary =
-      stageEvents.length > 0
-        ? (stageEvents[stageEvents.length - 1].event ?? '')
-        : '';
-
-    stageDetails[stage] = { status, duration, toolCalls, summary };
-  }
-
-  return { stagesMap, stageDetails };
-}
-
-function normalizeStatus(raw: string): StageStatus {
-  const v = raw.toLowerCase();
-  if (
-    v === 'pending' ||
-    v === 'running' ||
-    v === 'completed' ||
-    v === 'failed' ||
-    v === 'skipped'
-  ) {
-    return v;
-  }
-  if (v === 'awaiting' || v === 'awaiting_review') return 'running';
-  return 'pending';
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
-}
-
 // ── Transform ──────────────────────────────────────────────
 
 export function transformTaskToItem(apiTask: ApiTask): TaskItem {
-  const events = apiTask.events ?? [];
-  const currentExec = pickCurrentExecution(apiTask.executions ?? []);
-  const { stagesMap, stageDetails } = currentExec
-    ? buildStageDetailsFromExecution(currentExec)
-    : buildStageDetailsFromLegacy(apiTask.stages, events);
-
-  const totalCost = apiTask.totalCostUsd
-    ? `$${apiTask.totalCostUsd.toFixed(4)}`
-    : '$0';
-
   return {
     id: apiTask.id,
     title: apiTask.type.replace(/_/g, ' '),
     status: mapStatus(apiTask.status),
-    repo: apiTask.repositoryUrl,
+    repo: apiTask.project?.repositoryUrl ?? '',
     branch: '',
     workflow: apiTask.type,
-    model: apiTask.model ?? '',
-    currentStage: (apiTask.currentStage ??
-      currentExec?.stages.find((s) => s.status === 'RUNNING')?.stageName ??
-      'analysis') as TaskStage,
-    stages: stagesMap,
-    stageDetails,
-    duration: apiTask.durationMs ? formatDuration(apiTask.durationMs) : '—',
-    cost: totalCost,
+    model: '',
+    currentStage: 'analysis' as TaskStage,
+    stages: {} as Partial<Record<TaskStage, StageStatus>>,
+    stageDetails: {} as Partial<Record<TaskStage, StageDetail>>,
+    duration: '—',
+    cost: '$0',
     sandbox: '',
     badges: [],
     createdAt: apiTask.createdAt,
@@ -364,66 +204,53 @@ export function transformTaskToItem(apiTask: ApiTask): TaskItem {
   };
 }
 
-function pickCurrentExecution(
-  executions: ApiExecution[]
-): ApiExecution | null {
-  if (executions.length === 0) return null;
-  // The GraphQL query orders desc by startedAt, so [0] is the most recent.
-  return executions[0];
-}
-
 export function transformTaskToDetail(apiTask: ApiTask): TaskDetail {
   const task = transformTaskToItem(apiTask);
   const events = apiTask.events ?? [];
   const executions = (apiTask.executions ?? []).map(mapExecution);
   const currentExecution = executions[0] ?? null;
 
-  const totalTokens = (apiTask.inputTokens ?? 0) + (apiTask.outputTokens ?? 0);
-  const totalCost = apiTask.totalCostUsd
-    ? `$${apiTask.totalCostUsd.toFixed(4)}`
-    : '$0';
-
   const timeline: TimelineEvent[] = events.map(mapEvent);
 
-  // Cost breakdown: prefer denormalized execution data when available,
-  // fall back to legacy JSON. This keeps the same UI working during
-  // the transition window.
-  let cost: CostBreakdown[] = [];
-  if (currentExecution) {
-    cost = buildCostFromExecution(currentExecution);
-  } else if (apiTask.costBreakdown && apiTask.costBreakdown.length > 0) {
-    cost = apiTask.costBreakdown.map((c) => ({
-      stage: c.stage as TaskStage,
-      inputTokens: c.inputTokens,
-      outputTokens: c.outputTokens,
-      cost: c.cost,
-      duration: c.duration,
-      model: c.model,
-    }));
+  // Cost rollup is deferred to the agent_log work — empty for now.
+  const cost: CostBreakdown[] = [];
+  const diff: DiffFile[] = [];
+
+  // Health: derived from FAILED stage events on the latest attempt.
+  const failedStageKeys = new Set<string>();
+  const completedStageKeys = new Set<string>();
+  const latestStageStatus = new Map<string, string>();
+  for (const e of events) {
+    if (e.kind !== 'STAGE') continue;
+    const prev = latestStageStatus.get(e.stageKey);
+    // Keep latest by attempt order (events sorted asc by startedAt).
+    latestStageStatus.set(e.stageKey, e.status);
+    void prev;
   }
-
-  const diff: DiffFile[] = extractDiffFromResult(apiTask.result);
-
-  const failedStages = KNOWN_STAGES.filter(
-    (s) => task.stages[s] === 'failed'
-  );
-  const completedStages = KNOWN_STAGES.filter(
-    (s) => task.stages[s] === 'completed'
-  );
+  for (const [key, status] of latestStageStatus.entries()) {
+    if (status === 'FAILED') failedStageKeys.add(key.toLowerCase());
+    if (status === 'COMPLETED') completedStageKeys.add(key.toLowerCase());
+  }
+  const failedStages = KNOWN_STAGES.filter((s) => failedStageKeys.has(s));
+  const completedStages = KNOWN_STAGES.filter((s) => completedStageKeys.has(s));
   const alerts: HealthAlert[] = failedStages.map((s) => ({
     type: 'error' as const,
     severity: 'warning' as const,
     message: `Stage "${s}" failed`,
   }));
 
-  const samples: SampleView[] = (apiTask.samples ?? []).map(mapSampleShallow);
-  const reviews: ReviewView[] = (apiTask.reviews ?? []).map(mapReview);
+  const samples: SampleView[] = [];
+  const reviews: ReviewView[] = [];
 
-  const prUrl = (
-    apiTask.result?.pullRequest as Record<string, unknown> | undefined
-  )?.url
-    ? String((apiTask.result?.pullRequest as Record<string, unknown>).url)
-    : '';
+  // PR URL is on the latest PR stage event's output.
+  let prUrl = '';
+  const prEvent = [...events]
+    .reverse()
+    .find((e) => e.kind === 'STAGE' && e.stageKey === 'PR' && e.output);
+  if (prEvent) {
+    const out = prEvent.output as { url?: string };
+    if (out.url) prUrl = String(out.url);
+  }
 
   const retryCount =
     currentExecution?.stages.reduce(
@@ -457,8 +284,8 @@ export function transformTaskToDetail(apiTask: ApiTask): TaskDetail {
       pathDeviation: false,
       errorCount: failedStages.length,
       retryCount,
-      totalTokens,
-      totalCost,
+      totalTokens: 0,
+      totalCost: '$0',
     },
     approvals: [],
     currentExecution,
@@ -471,29 +298,21 @@ export function transformTaskToDetail(apiTask: ApiTask): TaskDetail {
 // ── Sub-mappers ──────────────────────────────────────────────
 
 function mapEvent(e: ApiEvent): TimelineEvent {
+  const stage = e.stageKey.toLowerCase() as TaskStage;
+  const event = `${e.kind} attempt ${e.attemptNumber} → ${e.status.toLowerCase()}`;
+  const level: EventLevel =
+    e.status === 'FAILED' || e.status === 'REJECTED' ? 'warn' : 'info';
   return {
-    timestamp: e.occurredAt ?? e.timestamp,
-    stage: (e.stage ?? deriveStageFromEventType(e.eventType)) as TaskStage,
-    event: e.event ?? e.eventType ?? 'event',
-    level: (e.level ?? 'info') as EventLevel,
-    agent: e.agent ?? undefined,
-    tool: e.tool ?? undefined,
-    details: e.details ?? undefined,
-    eventType: e.eventType,
-    payload: e.payload,
-    stageExecutionId: e.stageExecutionId ?? null,
-    attemptExecutionId: e.attemptExecutionId ?? null,
-    spanId: e.spanId ?? null,
+    timestamp: e.startedAt,
+    stage,
+    event,
+    level,
+    eventType: e.kind,
+    payload: e.output ?? e.input,
+    stageExecutionId: null,
+    attemptExecutionId: null,
+    spanId: null,
   };
-}
-
-function deriveStageFromEventType(eventType: string | undefined): string {
-  if (!eventType) return 'analysis';
-  if (eventType.startsWith('Analysis')) return 'analysis';
-  if (eventType.startsWith('Sample')) return 'implement';
-  if (eventType.startsWith('Human')) return 'critic';
-  if (eventType.startsWith('PullRequest')) return 'pr';
-  return 'analysis';
 }
 
 function mapExecution(e: ApiExecution): ExecutionView {
@@ -522,7 +341,7 @@ function mapStage(s: ApiStage): StageView {
     endedAt: s.endedAt,
     durationMs: s.durationMs,
     attempts: s.attempts.map(mapAttempt),
-    reviews: s.reviews.map(mapReview),
+    reviews: [],
   };
 }
 
@@ -538,7 +357,7 @@ function mapAttempt(a: ApiAttempt): AttemptView {
     endedAt: a.endedAt,
     durationMs: a.durationMs,
     invocations: a.invocations.map(mapInvocation),
-    samples: a.samples.map(mapSample),
+    samples: [],
   };
 }
 
@@ -593,47 +412,6 @@ function mapToolCall(tc: ApiToolCall): ToolCallView {
   };
 }
 
-function mapSample(s: ApiSample): SampleView {
-  return {
-    id: s.id,
-    attemptExecutionId: s.attemptExecutionId ?? '',
-    sampleIndex: s.sampleIndex,
-    branch: s.branch,
-    summary: s.summary ?? '',
-    filesChanged: s.filesChanged ?? [],
-    patch: s.patch ?? '',
-    additions: s.additions ?? 0,
-    deletions: s.deletions ?? 0,
-    filterPassed: s.filterPassed,
-    filterChecks: s.filterChecks,
-    criticApproved: s.criticApproved ?? null,
-    criticScore: s.criticScore,
-    criticConcerns: s.criticConcerns,
-    selected: s.selected,
-    createdAt: s.createdAt,
-  };
-}
-
-/**
- * Task-level samples (flat list) come back with fewer fields than
- * samples nested under an attempt. This maps the shallow shape.
- */
-function mapSampleShallow(s: ApiSample): SampleView {
-  return mapSample(s);
-}
-
-function mapReview(r: ApiReview): ReviewView {
-  return {
-    id: r.id,
-    stageExecutionId: r.stageExecutionId ?? '',
-    decisionType: r.decisionType ?? 'BINARY',
-    action: r.action,
-    feedback: r.feedback,
-    userId: r.userId,
-    createdAt: r.createdAt,
-  };
-}
-
 function mapRetrospective(r: ApiRetrospective): RetrospectiveView {
   return {
     id: r.id,
@@ -660,76 +438,4 @@ function mapRetrospective(r: ApiRetrospective): RetrospectiveView {
     costUsd: r.costUsd,
     createdAt: r.createdAt,
   };
-}
-
-function buildCostFromExecution(exec: ExecutionView): CostBreakdown[] {
-  return exec.stages
-    .filter((s) => s.attempts.some((a) => a.invocations.length > 0))
-    .map((s) => {
-      let inputTokens = 0;
-      let outputTokens = 0;
-      let cost = 0;
-      let model = '';
-      let totalDurationMs = 0;
-      for (const attempt of s.attempts) {
-        for (const inv of attempt.invocations) {
-          inputTokens += inv.inputTokens ?? 0;
-          outputTokens += inv.outputTokens ?? 0;
-          cost += inv.totalCostUsd ?? 0;
-          totalDurationMs += inv.durationMs ?? 0;
-          if (!model && inv.model) model = inv.model;
-        }
-      }
-      return {
-        stage: s.stageName as TaskStage,
-        inputTokens,
-        outputTokens,
-        cost,
-        duration: formatDuration(totalDurationMs),
-        model,
-      };
-    });
-}
-
-function extractDiffFromResult(
-  result: Record<string, unknown> | null | undefined
-): DiffFile[] {
-  if (!result?.diff || !Array.isArray(result.diff)) return [];
-  const out: DiffFile[] = [];
-  for (const d of result.diff as Array<Record<string, unknown>>) {
-    out.push({
-      path: String(d.file ?? ''),
-      additions: Number(d.additions ?? 0),
-      deletions: Number(d.deletions ?? 0),
-      hunks: parsePatchToHunks(String(d.patch ?? '')),
-    });
-  }
-  return out;
-}
-
-function parsePatchToHunks(patch: string): DiffFile['hunks'] {
-  if (!patch) return [];
-  const lines = patch.split('\n');
-  const hunks: DiffFile['hunks'] = [];
-  let currentHunk: DiffFile['hunks'][number] | null = null;
-
-  for (const line of lines) {
-    if (line.startsWith('@@')) {
-      if (currentHunk) hunks.push(currentHunk);
-      currentHunk = { header: line, lines: [] };
-    } else if (currentHunk) {
-      if (line.startsWith('+')) {
-        currentHunk.lines.push({ type: 'add', content: line.slice(1) });
-      } else if (line.startsWith('-')) {
-        currentHunk.lines.push({ type: 'remove', content: line.slice(1) });
-      } else {
-        currentHunk.lines.push({
-          type: 'context',
-          content: line.startsWith(' ') ? line.slice(1) : line,
-        });
-      }
-    }
-  }
-  if (currentHunk) hunks.push(currentHunk);
-  return hunks;
 }
