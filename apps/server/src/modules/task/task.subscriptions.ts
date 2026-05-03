@@ -3,10 +3,10 @@ import { taskPubSub } from '../../infrastructure/graphql/pubsub.js';
 import { log } from '../../logger.js';
 
 /**
- * Live subscription for one task's state. Client subscribes with the
- * taskId; server listens for pubsub pings for that id and re-fetches
- * the full task (so Apollo's cache normalization can merge everything
- * at once). The `iterate` helper debounces bursts at 250 ms.
+ * Live subscription for one task. Workflow is the only writer of task /
+ * stage / awaiting state; the pg_notify trigger on `task` /
+ * `stage_execution` / `attempt_execution` fires on UPDATE and the server
+ * fans out a debounced refetch (250 ms trailing) to subscribed clients.
  *
  * Auth: subscribe resolver verifies task.userId === ctx.user.id on the
  * first fetch; if the task doesn't belong to the user, an error is
@@ -20,9 +20,15 @@ builder.subscriptionField('taskUpdated', (t) =>
       id: t.arg.string({ required: true }),
     },
     subscribe: async function* (_parent, { id }, ctx) {
-      log.debug({ taskId: id, userId: ctx.user?.id }, 'taskUpdated: subscribe start');
+      log.debug(
+        { taskId: id, userId: ctx.user?.id },
+        'taskUpdated: subscribe start'
+      );
       if (!ctx.user) {
-        log.warn({ taskId: id }, 'taskUpdated: ctx.user missing — closing stream');
+        log.warn(
+          { taskId: id },
+          'taskUpdated: ctx.user missing — closing stream'
+        );
         return;
       }
       const task = await ctx.prisma.task.findFirst({
@@ -52,7 +58,10 @@ builder.subscriptionField('taskUpdated', (t) =>
         ...query,
         where: { id: id as string, userId: ctx.user?.id },
       });
-      log.debug({ taskId: id, status: (row as { status?: string }).status }, 'taskUpdated: resolve done');
+      log.debug(
+        { taskId: id, status: (row as { status?: string }).status },
+        'taskUpdated: resolve done'
+      );
       return row;
     },
   })

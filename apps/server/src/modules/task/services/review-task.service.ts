@@ -12,6 +12,15 @@ interface TaskQuery {
   select?: Prisma.TaskSelect;
 }
 
+/**
+ * Records the human review action as a REVIEW event row matching the
+ * currently AWAITING stage attempt, then signals the workflow to resume.
+ *
+ * Writing the row before signaling means the UI sees the new entry
+ * immediately via the pg_notify trigger; the workflow processes the
+ * signal on its next tick and updates the STAGE row to COMPLETED or
+ * REJECTED.
+ */
 export class ReviewTaskService {
   constructor(private prisma: PrismaClient) {}
 
@@ -34,17 +43,40 @@ export class ReviewTaskService {
       throw new NotFoundError('Task', taskId);
     }
 
-    if (task.status !== 'AWAITING_REVIEW') {
+    if (!task.workflowId) {
+      throw new AppError('Task has no associated workflow', 'NO_WORKFLOW', 400);
+    }
+
+    const awaiting = await this.prisma.taskEvent.findFirst({
+      where: { taskId, kind: 'STAGE', status: 'AWAITING' },
+      orderBy: { startedAt: 'desc' },
+      select: { stageKey: true, attemptNumber: true },
+    });
+    if (!awaiting) {
       throw new AppError(
-        `Task is not awaiting review (current status: ${task.status})`,
+        'Task has no stage awaiting review',
         'INVALID_STATE',
         400
       );
     }
 
-    if (!task.workflowId) {
-      throw new AppError('Task has no associated workflow', 'NO_WORKFLOW', 400);
-    }
+    const now = new Date();
+    await this.prisma.taskEvent.create({
+      data: {
+        taskId,
+        kind: 'REVIEW',
+        stageKey: awaiting.stageKey,
+        attemptNumber: awaiting.attemptNumber,
+        status: 'COMPLETED',
+        output: {
+          action,
+          feedback: feedback ?? null,
+        } as Prisma.InputJsonValue,
+        decidedBy: user.id,
+        endedAt: now,
+        durationMs: 0,
+      },
+    });
 
     const client = await createTemporalClient();
     const handle = client.workflow.getHandle(task.workflowId);

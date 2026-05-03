@@ -1,4 +1,5 @@
 import SchemaBuilder from '@pothos/core';
+import DataloaderPlugin from '@pothos/plugin-dataloader';
 import PrismaPlugin from '@pothos/plugin-prisma';
 import RelayPlugin from '@pothos/plugin-relay';
 import ScopeAuthPlugin from '@pothos/plugin-scope-auth';
@@ -25,7 +26,13 @@ export const builder = new SchemaBuilder<{
     };
   };
 }>({
-  plugins: [PrismaPlugin, RelayPlugin, ScopeAuthPlugin, SimpleObjectsPlugin],
+  plugins: [
+    PrismaPlugin,
+    DataloaderPlugin,
+    RelayPlugin,
+    ScopeAuthPlugin,
+    SimpleObjectsPlugin,
+  ],
   prisma: {
     client: prisma,
     dmmf: getDatamodel(),

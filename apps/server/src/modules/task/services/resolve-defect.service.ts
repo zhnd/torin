@@ -39,8 +39,8 @@ export class ResolveDefectService {
       ...query,
       data: {
         type: 'RESOLVE_DEFECT',
-        repositoryUrl: project.repositoryUrl,
         status: 'PENDING',
+        input: { defectDescription },
         userId: user.id,
         projectId: project.id,
       },

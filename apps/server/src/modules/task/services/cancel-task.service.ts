@@ -12,6 +12,13 @@ interface TaskQuery {
   select?: Prisma.TaskSelect;
 }
 
+/**
+ * Sends a cancel signal to the workflow. Final status (CANCELLED + error)
+ * is written by the workflow's cancellation branch via updateTaskActivity,
+ * which fires the pg_notify trigger and pushes the new state to the
+ * subscription. The service itself never mutates Task — workflow is the
+ * sole writer of state.
+ */
 export class CancelTaskService {
   constructor(private prisma: PrismaClient) {}
 
@@ -28,7 +35,11 @@ export class CancelTaskService {
       throw new NotFoundError('Task', taskId);
     }
 
-    if (task.status === 'COMPLETED' || task.status === 'FAILED') {
+    if (
+      task.status === 'COMPLETED' ||
+      task.status === 'FAILED' ||
+      task.status === 'CANCELLED'
+    ) {
       throw new AppError(
         `Task is already ${task.status.toLowerCase()}`,
         'INVALID_STATE',
@@ -42,16 +53,14 @@ export class CancelTaskService {
       try {
         await handle.cancel();
       } catch {
-        // Workflow may already be finished
+        // Workflow may already be finished; nothing to do — workflow's
+        // catch block (if it ran) has already set the terminal state.
       }
     }
 
-    // Update status immediately — the workflow's catch block will also try,
-    // but this ensures the UI reflects the cancellation right away
-    return this.prisma.task.update({
+    return this.prisma.task.findUniqueOrThrow({
       ...query,
       where: { id: taskId },
-      data: { status: 'FAILED', error: 'Cancelled by user' },
     });
   }
 }

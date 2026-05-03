@@ -30,8 +30,9 @@ export class AnalyzeRepositoryService {
     const task = await this.prisma.task.create({
       ...query,
       data: {
-        repositoryUrl: project.repositoryUrl,
+        type: 'ANALYZE_REPOSITORY',
         status: 'PENDING',
+        input: { repositoryUrl: project.repositoryUrl },
         userId: user.id,
         projectId: project.id,
       },

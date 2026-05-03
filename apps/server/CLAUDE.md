@@ -36,7 +36,10 @@ src/
     {domain}.schema.ts       # GraphQL types only (builder.prismaObject)
     {domain}.resolvers.ts    # Queries + Mutations (instantiate service, call execute)
     services/
-      {operation}.service.ts # Business logic (validation, auth, Prisma ops)
+      {operation}.service.ts # Business logic for mutations / multi-step ops with auth
+    loaders/
+      {name}.loader.ts       # Per-field data loaders — fetch + shape for a resolver,
+                             # GraphQL ecosystem term (cf. DataLoader, Pothos loadable)
     dto/
       {operation}.input.ts   # GraphQL input types (builder.inputType)
     index.ts                 # Entry: imports schema + resolvers for side-effect registration
@@ -49,7 +52,12 @@ src/
 - **Schema and resolvers are separate files** — never mix type definitions with query/mutation logic
 - **One service per operation** — no god services; class with `execute()` method
 - **Resolvers are thin** — instantiate service, call `service.execute(query, input, user)`, return result
-- **Services own business logic** — validation, authorization, Prisma operations
+- **Services own mutation business logic** — validation, authorization, multi-step Prisma ops
+- **Loaders own derived-field reads** — function-based modules that fetch + shape data for one
+  GraphQL field's resolver. No auth (the parent type already enforced ownership). Schema
+  resolvers delegate one-line: `resolve: (parent, _, ctx) => loadX(parent.id, ctx.prisma)`.
+  Co-locate the response-shape types in the same file so the schema imports them alongside
+  the loader functions.
 - **Use error classes** from `infrastructure/errors/` (NotFoundError, UnauthorizedError, ValidationError)
 - **Always spread `query`** in Prisma calls for Pothos N+1 optimization
 - **Register modules** in `infrastructure/graphql/schema.ts` via side-effect import

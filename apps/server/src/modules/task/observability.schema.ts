@@ -1,6 +1,7 @@
 import { builder } from '../../infrastructure/graphql/builder.js';
 
-// ── Layer 1: Execution telemetry ──────────────────────────────
+// Trace tier — populated by the deferred trace work. Currently no rows;
+// the types are wired for the future "agent execution detail" view.
 
 builder.prismaObject('WorkflowExecution', {
   fields: (t) => ({
@@ -38,9 +39,6 @@ builder.prismaObject('StageExecution', {
     attempts: t.relation('attempts', {
       query: { orderBy: { attemptNumber: 'asc' } },
     }),
-    reviews: t.relation('reviews', {
-      query: { orderBy: { createdAt: 'asc' } },
-    }),
   }),
 });
 
@@ -62,9 +60,6 @@ builder.prismaObject('AttemptExecution', {
     durationMs: t.exposeInt('durationMs', { nullable: true }),
     invocations: t.relation('invocations', {
       query: { orderBy: { startedAt: 'asc' } },
-    }),
-    samples: t.relation('samples', {
-      query: { orderBy: { sampleIndex: 'asc' } },
     }),
   }),
 });
@@ -132,46 +127,6 @@ builder.prismaObject('ToolCall', {
   }),
 });
 
-// ── Layer 3: Domain aggregates ────────────────────────────────
-
-builder.prismaObject('ResolutionSample', {
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    taskId: t.exposeString('taskId'),
-    attemptExecutionId: t.exposeString('attemptExecutionId'),
-    sampleIndex: t.exposeInt('sampleIndex'),
-    branch: t.exposeString('branch'),
-    summary: t.exposeString('summary'),
-    filesChanged: t.expose('filesChanged', { type: 'Json' }),
-    patch: t.exposeString('patch'),
-    additions: t.exposeInt('additions'),
-    deletions: t.exposeInt('deletions'),
-    filterPassed: t.exposeBoolean('filterPassed'),
-    filterChecks: t.expose('filterChecks', { type: 'Json', nullable: true }),
-    criticApproved: t.exposeBoolean('criticApproved', { nullable: true }),
-    criticScore: t.exposeFloat('criticScore', { nullable: true }),
-    criticConcerns: t.expose('criticConcerns', {
-      type: 'Json',
-      nullable: true,
-    }),
-    selected: t.exposeBoolean('selected'),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
-  }),
-});
-
-builder.prismaObject('HumanReview', {
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    taskId: t.exposeString('taskId'),
-    stageExecutionId: t.exposeString('stageExecutionId'),
-    decisionType: t.exposeString('decisionType'),
-    action: t.exposeString('action'),
-    feedback: t.exposeString('feedback', { nullable: true }),
-    userId: t.exposeString('userId', { nullable: true }),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
-  }),
-});
-
 builder.prismaObject('Retrospective', {
   fields: (t) => ({
     id: t.exposeID('id'),
@@ -183,16 +138,6 @@ builder.prismaObject('Retrospective', {
     stats: t.expose('stats', { type: 'Json' }),
     model: t.exposeString('model', { nullable: true }),
     costUsd: t.exposeFloat('costUsd', { nullable: true }),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
-  }),
-});
-
-builder.prismaObject('TaskResult', {
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    taskId: t.exposeString('taskId'),
-    workflowKind: t.exposeString('workflowKind'),
-    payload: t.expose('payload', { type: 'Json' }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });
