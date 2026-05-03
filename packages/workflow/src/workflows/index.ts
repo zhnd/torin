@@ -1,2 +1,2 @@
-export { analyzeRepositoryWorkflow } from './analyze-repository.js';
-export { resolveDefectWorkflow, reviewSignal } from './resolve-defect.js';
+export { analyzeRepositoryWorkflow } from './analyze-repository/index.js';
+export { resolveDefectWorkflow, reviewSignal } from './resolve-defect/index.js';

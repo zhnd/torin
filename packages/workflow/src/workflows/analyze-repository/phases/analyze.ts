@@ -1,0 +1,29 @@
+import type { AnalyzeRepositoryInput } from '@torin/domain';
+import type { PhaseContext } from '../index.js';
+import { main, sandboxAgent } from '../proxies.js';
+import { buildAnalyzeStageInput } from '../transformer.js';
+
+/**
+ * Single-stage analysis: open ANALYSIS, run the agent, close with the
+ * full analysis output. No HITL gate, no retry loop.
+ */
+export async function runAnalyze(
+  ctx: PhaseContext,
+  input: AnalyzeRepositoryInput
+): Promise<void> {
+  const { startedStage } = await main.updateTaskActivity({
+    taskId: ctx.taskId,
+    startStage: {
+      stageKey: 'ANALYSIS',
+      input: buildAnalyzeStageInput({ input }),
+    },
+  });
+  const eventId = startedStage!.eventId;
+
+  const { result } = await sandboxAgent.analyzeCodeActivity(ctx.sandboxState);
+
+  await main.updateTaskActivity({
+    taskId: ctx.taskId,
+    updateStage: { eventId, status: 'COMPLETED', output: result },
+  });
+}

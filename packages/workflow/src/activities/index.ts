@@ -17,5 +17,4 @@ export { pushBranchActivity } from './push-branch.js';
 export { renameBranchActivity } from './rename-branch.js';
 export { reproduceDefectActivity } from './reproduce-defect.js';
 export { resetSandboxActivity } from './reset-sandbox.js';
-export { saveTaskEventsActivity } from './save-task-events.js';
-export { updateTaskStatusActivity } from './update-task.js';
+export { updateTaskActivity } from './update-task.js';

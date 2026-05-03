@@ -6,7 +6,7 @@ export {
   destroySandboxActivity,
   implementResolutionActivity,
   pushBranchActivity,
-  updateTaskStatusActivity,
+  updateTaskActivity,
 } from './activities/index.js';
 export {
   createTemporalClient,
