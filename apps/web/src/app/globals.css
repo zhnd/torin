@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind v4 needs to scan streamdown's compiled output for utility
+   classes used in its rendered markdown. Path is relative from this
+   CSS file to the hoisted root node_modules in the pnpm monorepo. */
+@source "../../../../node_modules/streamdown/dist/*.js";
+
 :root {
   /* shadcn base (kept for existing components) */
   --background: oklch(1 0 0);

@@ -1,4 +1,5 @@
 import { Dot } from '../dot';
+import { Markdown } from '../markdown';
 
 export interface Concern {
   severity: 'blocking' | 'warning' | 'info' | string;
@@ -36,11 +37,14 @@ export function ConcernCard({ concern }: { concern: Concern }) {
             </span>
           )}
         </div>
-        <p className="m-0 text-[13px]">{body}</p>
+        <Markdown className="text-[13px]">{body}</Markdown>
         {concern.suggestion && (
-          <p className="m-0 mt-1.5 text-[12px] text-foreground-muted">
-            → {concern.suggestion}
-          </p>
+          <div className="mt-1.5 flex items-start gap-1.5 text-foreground-muted">
+            <span className="mt-px text-[12px] leading-[1.6]">→</span>
+            <Markdown className="text-[12px] text-foreground-muted">
+              {concern.suggestion}
+            </Markdown>
+          </div>
         )}
       </div>
     </div>
