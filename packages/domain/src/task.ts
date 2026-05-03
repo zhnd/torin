@@ -1,9 +1,62 @@
-export type TaskStatus =
-  | 'PENDING'
-  | 'RUNNING'
-  | 'AWAITING_REVIEW'
-  | 'COMPLETED'
-  | 'FAILED';
+// ── Task / TaskEvent vocabulary ──────────────────────────
+//
+// Types are re-exported from @torin/database (Prisma-generated enums are
+// the single source of truth). This file owns the *business semantics* —
+// terminal-status sets, predicates, canonical pipeline order — that
+// Prisma can't infer from the schema alone.
+//
+// `@torin/domain` depends on `@torin/database` for **type-only** imports.
+// Type imports compile away, so consumers (web, server, workflow) don't
+// pull in any runtime database code.
+
+export type {
+  TaskEventKind,
+  TaskEventStatus,
+  TaskStageKey,
+  TaskStatus,
+} from '@torin/database';
+
+import type {
+  TaskEventStatus,
+  TaskStageKey,
+  TaskStatus,
+} from '@torin/database';
+
+export const CANONICAL_STAGE_ORDER: TaskStageKey[] = [
+  'ANALYSIS',
+  'REPRODUCE',
+  'IMPLEMENT',
+  'FILTER',
+  'CRITIC',
+  'PR',
+];
+
+export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = [
+  'COMPLETED',
+  'FAILED',
+  'CANCELLED',
+] as const;
+
+export const TERMINAL_STAGE_EVENT_STATUSES: readonly TaskEventStatus[] = [
+  'COMPLETED',
+  'REJECTED',
+  'FAILED',
+  'SKIPPED',
+] as const;
+
+export function isTaskTerminal(status: TaskStatus): boolean {
+  return TERMINAL_TASK_STATUSES.includes(status);
+}
+
+export function isStageEventTerminal(status: TaskEventStatus): boolean {
+  return TERMINAL_STAGE_EVENT_STATUSES.includes(status);
+}
+
+// ── Legacy task-stage / status types (used by web rendering) ─────────
+//
+// These predate the new TaskEvent model. Web's StageTrack still consumes
+// the lowercase forms; keep them until web migrates to the uppercase
+// TaskStageKey + TaskEventStatus directly.
 
 export type TaskStage =
   | 'analysis'
@@ -14,9 +67,11 @@ export type TaskStage =
   | 'critic'
   | 'test'
   | 'pr';
+
 export type StageStatus =
   | 'pending'
   | 'running'
+  | 'awaiting'
   | 'completed'
   | 'failed'
   | 'skipped';

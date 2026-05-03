@@ -23,7 +23,8 @@
     "generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "prisma": "prisma"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

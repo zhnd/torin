@@ -1,11 +1,9 @@
 -- AlterTable
 ALTER TABLE "task" ADD COLUMN     "costBreakdown" JSONB,
-ADD COLUMN     "currentStage" TEXT,
 ADD COLUMN     "durationMs" INTEGER,
 ADD COLUMN     "inputTokens" INTEGER,
 ADD COLUMN     "model" TEXT,
 ADD COLUMN     "outputTokens" INTEGER,
-ADD COLUMN     "stages" JSONB,
 ADD COLUMN     "totalCostUsd" DOUBLE PRECISION;
 
 -- CreateTable

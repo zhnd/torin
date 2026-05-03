@@ -37,10 +37,32 @@ enum TaskType {
 enum TaskStatus {
   PENDING
   RUNNING
-  AWAITING_REVIEW
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum TaskEventKind {
+  STAGE
+  REVIEW
+}
+
+enum TaskEventStatus {
+  RUNNING
+  AWAITING
+  COMPLETED
+  REJECTED
+  FAILED
+  SKIPPED
+}
+
+enum TaskStageKey {
+  ANALYSIS
+  REPRODUCE
+  IMPLEMENT
+  FILTER
+  CRITIC
+  PR
 }
 
 enum ExecutionStatus {
@@ -65,26 +87,21 @@ enum AgentInvocationStatus {
   ERROR
 }
 
-enum DecisionType {
-  BINARY
-  TERNARY
-}
-
 // ── Auth (better-auth) ─────────────────────────────────────────
 
 model User {
-  id            String        @id
+  id            String      @id
   name          String
   email         String
-  emailVerified Boolean       @default(false)
+  emailVerified Boolean     @default(false)
   image         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
   sessions      Session[]
   accounts      Account[]
   projects      Project[]
   tasks         Task[]
-  reviews       HumanReview[]
+  taskReviews   TaskEvent[] @relation("decidedBy")
 
   @@unique([email])
   @@map("user")
@@ -141,11 +158,11 @@ model Verification {
 // ── Projects ───────────────────────────────────────────────────
 
 model Project {
-  id                   String        @id @default(cuid())
+  id                   String       @id @default(cuid())
   name                 String
   repositoryUrl        String
-  authMethod           AuthMethod    @default(NONE)
-  authProvider         AuthProvider  @default(GITHUB)
+  authMethod           AuthMethod   @default(NONE)
+  authProvider         AuthProvider @default(GITHUB)
   encryptedCredentials String?
   // Structured per-workflow config. Shape discriminated by key at read time.
   // e.g. { preview: { command, port, readyPattern } }
@@ -156,60 +173,95 @@ model Project {
   previewPort          Int?
   previewReadyPattern  String?
   userId               String
-  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks                Task[]
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   @@index([userId])
   @@map("project")
 }
 
 // ── Tasks ──────────────────────────────────────────────────────
+//
+// Task is slim metadata only: who, what, when, lifecycle status. No per-stage
+// state lives here — that's all in TaskEvent. The server resolver derives
+// the display view (current stage, awaiting flag, stage list with attempts +
+// reviews) from grouping events by stageKey.
 
 model Task {
   id            String     @id @default(cuid())
   type          TaskType   @default(ANALYZE_REPOSITORY)
   status        TaskStatus @default(PENDING)
-  repositoryUrl String
+
+  // Original request payload for this task (e.g. {defectDescription}).
+  input         Json
+
+  // How the task was triggered: 'manual' | 'webhook' | 'cron' | ...
+  triggerSource String     @default("manual")
+
+  // Terminal-only error text (set when status → FAILED / CANCELLED).
   error         String?
+
   userId        String?
   user          User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   projectId     String?
   project       Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
-  // Denormalized aggregates — source of truth is AgentInvocation rows.
-  // Kept here for fast list queries; recomputed on invocation write.
-  totalCostUsd  Float?
-  inputTokens   Int?
-  outputTokens  Int?
-  durationMs    Int?
-  model         String?
-
-  // Legacy columns — superseded by WorkflowExecution / StageExecution /
-  // AgentInvocation / TaskResult. Kept nullable for one release window so
-  // backfill can run and clients can read while migrating.
-  result        Json?
-  workflowId    String?
-  currentStage  String?
-  stages        Json?
-  costBreakdown Json?
-
-  // New relations
-  executions    WorkflowExecution[]
-  events        TaskEvent[]
-  samples       ResolutionSample[]
-  reviews       HumanReview[]
-  resultRecord  TaskResult?
+  // Temporal workflow id, set after workflow.start. Unique because each
+  // task corresponds to at most one running workflow.
+  workflowId    String?    @unique
 
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+  startedAt     DateTime?  // first transition into RUNNING
+  completedAt   DateTime?  // first transition into a terminal status
+
+  events        TaskEvent[]
+  executions    WorkflowExecution[]
 
   @@index([userId])
   @@index([projectId])
   @@index([status])
-  @@index([type])
+  @@index([createdAt])
   @@map("task")
+}
+
+// One row per (stage, attempt) for STAGE kind, or per (stage, attempt) of
+// HITL submission for REVIEW kind. Self-contained — input/output captures
+// what went in and came out so the row is debuggable in isolation.
+//
+// Lifecycle:
+//   STAGE: RUNNING → (AWAITING) → COMPLETED | REJECTED | FAILED | SKIPPED
+//   REVIEW: inserted at COMPLETED (the decision is the event)
+//
+// See plan: /Users/void/.claude/plans/cnb-cool-cnb-mellow-parnas.md
+model TaskEvent {
+  id            String          @id @default(cuid())
+  taskId        String
+  task          Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  kind          TaskEventKind
+  stageKey      TaskStageKey
+  attemptNumber Int             @default(1)
+
+  status        TaskEventStatus @default(RUNNING)
+  input         Json?
+  output        Json?
+  error         String?
+
+  // Reviewer userId — non-null iff kind = REVIEW.
+  decidedBy     String?
+  decidedByUser User?           @relation("decidedBy", fields: [decidedBy], references: [id], onDelete: SetNull)
+
+  startedAt     DateTime        @default(now())
+  endedAt       DateTime?
+  durationMs    Int?
+
+  @@unique([taskId, kind, stageKey, attemptNumber])
+  @@index([taskId, startedAt])
+  @@index([taskId, status])
+  @@map("task_event")
 }
 
 // ── Layer 0: Workflow registry ────────────────────────────────
@@ -242,22 +294,21 @@ model WorkflowStage {
   @@map("workflow_stage")
 }
 
-// ── Layer 1: Execution telemetry (OTel-shaped) ────────────────
+// ── Layer 1: Execution telemetry (deferred — kept for trace work) ─────
 
 model WorkflowExecution {
-  id                 String             @id @default(cuid())
+  id                 String           @id @default(cuid())
   taskId             String
-  task               Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task               Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
   workflowKind       String
-  workflowVersion    Int                @default(1)
-  traceId            String             @unique
+  workflowVersion    Int              @default(1)
+  traceId            String           @unique
   temporalWorkflowId String?
-  status             ExecutionStatus    @default(RUNNING)
-  startedAt          DateTime           @default(now())
+  status             ExecutionStatus  @default(RUNNING)
+  startedAt          DateTime         @default(now())
   endedAt            DateTime?
   durationMs         Int?
   stages             StageExecution[]
-  events             TaskEvent[]
   retrospective      Retrospective?
 
   @@index([taskId])
@@ -278,29 +329,25 @@ model StageExecution {
   endedAt             DateTime?
   durationMs          Int?
   attempts            AttemptExecution[]
-  reviews             HumanReview[]
-  events              TaskEvent[]
 
   @@index([workflowExecutionId, order])
   @@map("stage_execution")
 }
 
 model AttemptExecution {
-  id               String             @id @default(cuid())
+  id               String            @id @default(cuid())
   stageExecutionId String
-  stageExecution   StageExecution     @relation(fields: [stageExecutionId], references: [id], onDelete: Cascade)
+  stageExecution   StageExecution    @relation(fields: [stageExecutionId], references: [id], onDelete: Cascade)
   attemptNumber    Int
   triggerKind      String
   triggerPayload   Json?
-  spanId           String             @unique
+  spanId           String            @unique
   parentSpanId     String
-  status           StageStatus        @default(RUNNING)
-  startedAt        DateTime           @default(now())
+  status           StageStatus       @default(RUNNING)
+  startedAt        DateTime          @default(now())
   endedAt          DateTime?
   durationMs       Int?
   invocations      AgentInvocation[]
-  samples          ResolutionSample[]
-  events           TaskEvent[]
 
   @@unique([stageExecutionId, attemptNumber])
   @@map("attempt_execution")
@@ -371,89 +418,6 @@ model ToolCall {
   @@map("tool_call")
 }
 
-// ── Layer 2: Domain events (typed outbox) ─────────────────────
-
-model TaskEvent {
-  id                  String             @id @default(cuid())
-  taskId              String
-  task                Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  eventType           String             @default("Log")
-  payload             Json?
-  workflowExecutionId String?
-  workflowExecution   WorkflowExecution? @relation(fields: [workflowExecutionId], references: [id], onDelete: SetNull)
-  stageExecutionId    String?
-  stageExecution      StageExecution?    @relation(fields: [stageExecutionId], references: [id], onDelete: SetNull)
-  attemptExecutionId  String?
-  attemptExecution    AttemptExecution?  @relation(fields: [attemptExecutionId], references: [id], onDelete: SetNull)
-  traceId             String?
-  spanId              String?
-  occurredAt          DateTime           @default(now())
-
-  // Legacy free-form columns — still populated during transition so
-  // existing query paths (web event rendering) keep working. New code
-  // should read eventType + payload; legacy columns will be dropped
-  // after the backfill + UI cutover.
-  stage               String?
-  event               String?
-  level               String?
-  agent               String?
-  tool                String?
-  details             String?
-  timestamp           DateTime           @default(now())
-
-  @@index([taskId, occurredAt])
-  @@index([eventType])
-  @@index([workflowExecutionId])
-  @@index([taskId, timestamp])
-  @@map("task_event")
-}
-
-// ── Layer 3: Domain aggregates (workflow-specific) ────────────
-
-model ResolutionSample {
-  id                 String           @id @default(cuid())
-  taskId             String
-  task               Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  attemptExecutionId String
-  attemptExecution   AttemptExecution @relation(fields: [attemptExecutionId], references: [id], onDelete: Cascade)
-  sampleIndex        Int
-  branch             String
-  summary            String
-  filesChanged       Json
-  patch              String
-  additions          Int              @default(0)
-  deletions          Int              @default(0)
-  filterPassed       Boolean          @default(false)
-  filterChecks       Json?
-  criticApproved     Boolean?
-  criticScore        Float?
-  criticConcerns     Json?
-  selected           Boolean          @default(false)
-  createdAt          DateTime         @default(now())
-
-  @@index([taskId])
-  @@index([attemptExecutionId, sampleIndex])
-  @@map("resolution_sample")
-}
-
-model HumanReview {
-  id               String         @id @default(cuid())
-  taskId           String
-  task             Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  stageExecutionId String
-  stageExecution   StageExecution @relation(fields: [stageExecutionId], references: [id], onDelete: Cascade)
-  decisionType     DecisionType   @default(BINARY)
-  action           String
-  feedback         String?
-  userId           String?
-  user             User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt        DateTime       @default(now())
-
-  @@index([taskId, createdAt])
-  @@index([stageExecutionId])
-  @@map("human_review")
-}
-
 model Retrospective {
   id                  String            @id @default(cuid())
   workflowExecutionId String            @unique
@@ -468,15 +432,4 @@ model Retrospective {
   createdAt           DateTime          @default(now())
 
   @@map("retrospective")
-}
-
-model TaskResult {
-  id           String   @id @default(cuid())
-  taskId       String   @unique
-  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  workflowKind String
-  payload      Json
-  createdAt    DateTime @default(now())
-
-  @@map("task_result")
 }

@@ -1,7 +1,10 @@
--- This migration is authored idempotently so a partial failure can be
--- recovered by simply re-running `prisma migrate deploy`. CREATE TYPE /
--- CREATE TABLE / ADD COLUMN / ADD CONSTRAINT / CREATE INDEX all guard on
--- existence.
+-- Consolidates task / task_event into the new shape:
+--   * task = slim metadata (status, input, project, user, lifecycle timestamps)
+--   * task_event = self-contained execution units (STAGE attempts + REVIEW actions)
+-- Trace tier (workflow_execution / stage_execution / attempt_execution /
+-- agent_invocation / agent_turn / tool_call / retrospective) is kept for the
+-- deferred trace work but no longer linked from task_event.
+-- Dev-only migration: idempotency relaxed where it would obscure intent.
 
 -- ── Enums ─────────────────────────────────────────────────────
 DO $$ BEGIN
@@ -18,7 +21,7 @@ END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskStatus') THEN
-    CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'RUNNING', 'AWAITING_REVIEW', 'COMPLETED', 'FAILED', 'CANCELLED');
+    CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED');
   END IF;
 END $$;
 
@@ -41,8 +44,20 @@ DO $$ BEGIN
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'DecisionType') THEN
-    CREATE TYPE "DecisionType" AS ENUM ('BINARY', 'TERNARY');
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskEventKind') THEN
+    CREATE TYPE "TaskEventKind" AS ENUM ('STAGE', 'REVIEW');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskEventStatus') THEN
+    CREATE TYPE "TaskEventStatus" AS ENUM ('RUNNING', 'AWAITING', 'COMPLETED', 'REJECTED', 'FAILED', 'SKIPPED');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskStageKey') THEN
+    CREATE TYPE "TaskStageKey" AS ENUM ('ANALYSIS', 'REPRODUCE', 'IMPLEMENT', 'FILTER', 'CRITIC', 'PR');
   END IF;
 END $$;
 
@@ -50,8 +65,17 @@ END $$;
 ALTER TABLE "project" ADD COLUMN IF NOT EXISTS "authProvider" "AuthProvider" NOT NULL DEFAULT 'GITHUB';
 ALTER TABLE "project" ADD COLUMN IF NOT EXISTS "workflowConfig" JSONB;
 
--- ── Task: normalize legacy values + convert to enums ──────────
--- Skip normalization if already migrated (column type is enum, not text).
+-- ── Task: drop legacy / aggregate columns ─────────────────────
+ALTER TABLE "task" DROP COLUMN IF EXISTS "repositoryUrl";
+ALTER TABLE "task" DROP COLUMN IF EXISTS "result";
+ALTER TABLE "task" DROP COLUMN IF EXISTS "costBreakdown";
+ALTER TABLE "task" DROP COLUMN IF EXISTS "durationMs";
+ALTER TABLE "task" DROP COLUMN IF EXISTS "inputTokens";
+ALTER TABLE "task" DROP COLUMN IF EXISTS "outputTokens";
+ALTER TABLE "task" DROP COLUMN IF EXISTS "model";
+ALTER TABLE "task" DROP COLUMN IF EXISTS "totalCostUsd";
+
+-- ── Task: convert text → enum (skip if already enum) ──────────
 DO $$
 DECLARE
   task_type_is_text boolean;
@@ -65,8 +89,9 @@ BEGIN
     UPDATE "task" SET "type" = 'RESOLVE_DEFECT' WHERE "type" = 'FIX_BUG';
     UPDATE "task" SET "type" = 'ANALYZE_REPOSITORY'
       WHERE "type" NOT IN ('ANALYZE_REPOSITORY', 'RESOLVE_DEFECT');
+    -- Coerce out-of-set / dropped statuses (AWAITING_REVIEW removed).
     UPDATE "task" SET "status" = 'PENDING'
-      WHERE "status" NOT IN ('PENDING', 'RUNNING', 'AWAITING_REVIEW', 'COMPLETED', 'FAILED', 'CANCELLED');
+      WHERE "status" NOT IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED');
 
     ALTER TABLE "task"
       ALTER COLUMN "type" DROP DEFAULT,
@@ -78,24 +103,41 @@ BEGIN
   END IF;
 END $$;
 
--- ── TaskEvent: add typed-event columns, relax legacy NOT NULLs ─
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "attemptExecutionId" TEXT;
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "eventType" TEXT NOT NULL DEFAULT 'Log';
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "payload" JSONB;
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "spanId" TEXT;
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "stageExecutionId" TEXT;
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "traceId" TEXT;
-ALTER TABLE "task_event" ADD COLUMN IF NOT EXISTS "workflowExecutionId" TEXT;
-ALTER TABLE "task_event" ALTER COLUMN "stage" DROP NOT NULL;
-ALTER TABLE "task_event" ALTER COLUMN "event" DROP NOT NULL;
-ALTER TABLE "task_event" ALTER COLUMN "level" DROP NOT NULL;
-ALTER TABLE "task_event" ALTER COLUMN "level" DROP DEFAULT;
+-- ── Task: add new columns ─────────────────────────────────────
+-- Original request payload (defectDescription, etc.). Default '{}' lets
+-- the migration apply on a non-empty dev DB; new code always supplies a
+-- concrete value.
+ALTER TABLE "task" ADD COLUMN IF NOT EXISTS "input" JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE "task" ADD COLUMN IF NOT EXISTS "triggerSource" TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE "task" ADD COLUMN IF NOT EXISTS "startedAt" TIMESTAMP(3);
+ALTER TABLE "task" ADD COLUMN IF NOT EXISTS "completedAt" TIMESTAMP(3);
 
-UPDATE "task_event" SET "occurredAt" = "timestamp"
-  WHERE "occurredAt" IS DISTINCT FROM "timestamp" AND "timestamp" IS NOT NULL;
+-- Task.workflowId unique (one Temporal workflow per task)
+DO $$ BEGIN
+  CREATE UNIQUE INDEX "task_workflowId_key" ON "task"("workflowId");
+EXCEPTION WHEN duplicate_table THEN NULL; END $$;
 
--- ── New tables ────────────────────────────────────────────────
+-- ── task_event: drop old shape, create new ────────────────────
+DROP TABLE IF EXISTS "task_event" CASCADE;
+
+CREATE TABLE "task_event" (
+    "id" TEXT NOT NULL,
+    "taskId" TEXT NOT NULL,
+    "kind" "TaskEventKind" NOT NULL,
+    "stageKey" "TaskStageKey" NOT NULL,
+    "attemptNumber" INTEGER NOT NULL DEFAULT 1,
+    "status" "TaskEventStatus" NOT NULL DEFAULT 'RUNNING',
+    "input" JSONB,
+    "output" JSONB,
+    "error" TEXT,
+    "decidedBy" TEXT,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endedAt" TIMESTAMP(3),
+    "durationMs" INTEGER,
+    CONSTRAINT "task_event_pkey" PRIMARY KEY ("id")
+);
+
+-- ── Trace tier (kept; no longer linked from task_event) ───────
 CREATE TABLE IF NOT EXISTS "workflow_definition" (
     "id" TEXT NOT NULL,
     "kind" TEXT NOT NULL,
@@ -212,39 +254,6 @@ CREATE TABLE IF NOT EXISTS "tool_call" (
     CONSTRAINT "tool_call_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "resolution_sample" (
-    "id" TEXT NOT NULL,
-    "taskId" TEXT NOT NULL,
-    "attemptExecutionId" TEXT NOT NULL,
-    "sampleIndex" INTEGER NOT NULL,
-    "branch" TEXT NOT NULL,
-    "summary" TEXT NOT NULL,
-    "filesChanged" JSONB NOT NULL,
-    "patch" TEXT NOT NULL,
-    "additions" INTEGER NOT NULL DEFAULT 0,
-    "deletions" INTEGER NOT NULL DEFAULT 0,
-    "filterPassed" BOOLEAN NOT NULL DEFAULT false,
-    "filterChecks" JSONB,
-    "criticApproved" BOOLEAN,
-    "criticScore" DOUBLE PRECISION,
-    "criticConcerns" JSONB,
-    "selected" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "resolution_sample_pkey" PRIMARY KEY ("id")
-);
-
-CREATE TABLE IF NOT EXISTS "human_review" (
-    "id" TEXT NOT NULL,
-    "taskId" TEXT NOT NULL,
-    "stageExecutionId" TEXT NOT NULL,
-    "decisionType" "DecisionType" NOT NULL DEFAULT 'BINARY',
-    "action" TEXT NOT NULL,
-    "feedback" TEXT,
-    "userId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "human_review_pkey" PRIMARY KEY ("id")
-);
-
 CREATE TABLE IF NOT EXISTS "retrospective" (
     "id" TEXT NOT NULL,
     "workflowExecutionId" TEXT NOT NULL,
@@ -259,16 +268,17 @@ CREATE TABLE IF NOT EXISTS "retrospective" (
     CONSTRAINT "retrospective_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "task_result" (
-    "id" TEXT NOT NULL,
-    "taskId" TEXT NOT NULL,
-    "workflowKind" TEXT NOT NULL,
-    "payload" JSONB NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "task_result_pkey" PRIMARY KEY ("id")
-);
-
 -- ── Indexes ───────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS "task_status_idx" ON "task"("status");
+CREATE INDEX IF NOT EXISTS "task_createdAt_idx" ON "task"("createdAt");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "task_event_taskId_kind_stageKey_attemptNumber_key"
+  ON "task_event"("taskId", "kind", "stageKey", "attemptNumber");
+CREATE INDEX IF NOT EXISTS "task_event_taskId_startedAt_idx"
+  ON "task_event"("taskId", "startedAt");
+CREATE INDEX IF NOT EXISTS "task_event_taskId_status_idx"
+  ON "task_event"("taskId", "status");
+
 CREATE UNIQUE INDEX IF NOT EXISTS "workflow_definition_kind_key" ON "workflow_definition"("kind");
 CREATE INDEX IF NOT EXISTS "workflow_stage_workflowDefinitionId_order_idx" ON "workflow_stage"("workflowDefinitionId", "order");
 CREATE UNIQUE INDEX IF NOT EXISTS "workflow_stage_workflowDefinitionId_name_key" ON "workflow_stage"("workflowDefinitionId", "name");
@@ -285,19 +295,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS "agent_turn_agentInvocationId_turnIndex_key" O
 CREATE UNIQUE INDEX IF NOT EXISTS "tool_call_spanId_key" ON "tool_call"("spanId");
 CREATE INDEX IF NOT EXISTS "tool_call_agentInvocationId_startedAt_idx" ON "tool_call"("agentInvocationId", "startedAt");
 CREATE INDEX IF NOT EXISTS "tool_call_name_idx" ON "tool_call"("name");
-CREATE INDEX IF NOT EXISTS "resolution_sample_taskId_idx" ON "resolution_sample"("taskId");
-CREATE INDEX IF NOT EXISTS "resolution_sample_attemptExecutionId_sampleIndex_idx" ON "resolution_sample"("attemptExecutionId", "sampleIndex");
-CREATE INDEX IF NOT EXISTS "human_review_taskId_createdAt_idx" ON "human_review"("taskId", "createdAt");
-CREATE INDEX IF NOT EXISTS "human_review_stageExecutionId_idx" ON "human_review"("stageExecutionId");
 CREATE UNIQUE INDEX IF NOT EXISTS "retrospective_workflowExecutionId_key" ON "retrospective"("workflowExecutionId");
-CREATE UNIQUE INDEX IF NOT EXISTS "task_result_taskId_key" ON "task_result"("taskId");
-CREATE INDEX IF NOT EXISTS "task_status_idx" ON "task"("status");
-CREATE INDEX IF NOT EXISTS "task_type_idx" ON "task"("type");
-CREATE INDEX IF NOT EXISTS "task_event_taskId_occurredAt_idx" ON "task_event"("taskId", "occurredAt");
-CREATE INDEX IF NOT EXISTS "task_event_eventType_idx" ON "task_event"("eventType");
-CREATE INDEX IF NOT EXISTS "task_event_workflowExecutionId_idx" ON "task_event"("workflowExecutionId");
 
--- ── Foreign keys (DO blocks for idempotency) ──────────────────
+-- ── Foreign keys ──────────────────────────────────────────────
+DO $$ BEGIN
+  ALTER TABLE "task_event" ADD CONSTRAINT "task_event_taskId_fkey"
+    FOREIGN KEY ("taskId") REFERENCES "task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "task_event" ADD CONSTRAINT "task_event_decidedBy_fkey"
+    FOREIGN KEY ("decidedBy") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 DO $$ BEGIN
   ALTER TABLE "workflow_stage" ADD CONSTRAINT "workflow_stage_workflowDefinitionId_fkey" FOREIGN KEY ("workflowDefinitionId") REFERENCES "workflow_definition"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -331,41 +341,41 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  ALTER TABLE "task_event" ADD CONSTRAINT "task_event_workflowExecutionId_fkey" FOREIGN KEY ("workflowExecutionId") REFERENCES "workflow_execution"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE "task_event" ADD CONSTRAINT "task_event_stageExecutionId_fkey" FOREIGN KEY ("stageExecutionId") REFERENCES "stage_execution"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE "task_event" ADD CONSTRAINT "task_event_attemptExecutionId_fkey" FOREIGN KEY ("attemptExecutionId") REFERENCES "attempt_execution"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE "resolution_sample" ADD CONSTRAINT "resolution_sample_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE "resolution_sample" ADD CONSTRAINT "resolution_sample_attemptExecutionId_fkey" FOREIGN KEY ("attemptExecutionId") REFERENCES "attempt_execution"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE "human_review" ADD CONSTRAINT "human_review_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE "human_review" ADD CONSTRAINT "human_review_stageExecutionId_fkey" FOREIGN KEY ("stageExecutionId") REFERENCES "stage_execution"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE "human_review" ADD CONSTRAINT "human_review_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
   ALTER TABLE "retrospective" ADD CONSTRAINT "retrospective_workflowExecutionId_fkey" FOREIGN KEY ("workflowExecutionId") REFERENCES "workflow_execution"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-DO $$ BEGIN
-  ALTER TABLE "task_result" ADD CONSTRAINT "task_result_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- ── pg_notify triggers for GraphQL subscription ───────────────
+-- task: status / metadata changes
+-- task_event: any insert (new attempt, new review) or update (status mutate)
+-- Both push { taskId, kind } on channel 'torin_task_events'; the server's
+-- TaskPubSub fans out a debounced refetch (250 ms) to subscribers.
+
+CREATE OR REPLACE FUNCTION torin_notify_task() RETURNS trigger AS $$
+BEGIN
+  PERFORM pg_notify(
+    'torin_task_events',
+    json_build_object('taskId', NEW.id, 'kind', 'task')::text
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION torin_notify_task_event() RETURNS trigger AS $$
+BEGIN
+  PERFORM pg_notify(
+    'torin_task_events',
+    json_build_object('taskId', NEW."taskId", 'kind', 'task_event')::text
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS torin_task_notify ON "task";
+CREATE TRIGGER torin_task_notify
+  AFTER INSERT OR UPDATE ON "task"
+  FOR EACH ROW EXECUTE FUNCTION torin_notify_task();
+
+DROP TRIGGER IF EXISTS torin_task_event_notify ON "task_event";
+CREATE TRIGGER torin_task_event_notify
+  AFTER INSERT OR UPDATE ON "task_event"
+  FOR EACH ROW EXECUTE FUNCTION torin_notify_task_event();

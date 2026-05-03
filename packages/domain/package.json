@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@torin/database": "workspace:*",
     "zod": "^4.3.6"
   }
 }
