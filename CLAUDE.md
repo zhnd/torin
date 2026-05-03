@@ -22,15 +22,16 @@ packages/
   workflow/     # Temporal workflows, activities, and client
   agent/        # Claude Agent SDK, prompts, sandbox tools
   sandbox/      # Isolated execution environment (Docker-based)
+  githost/      # Multi-provider git host abstraction (GitHub + cnb.cool)
   shared/       # Pino logger, utilities
 ```
 
 ### Dependency direction
 
 ```
-server → database, workflow/client, shared
-worker → workflow → agent → sandbox
-workflow → database (activities), domain
+server → database, workflow/client, githost (URL parsing), shared
+worker → workflow → agent → sandbox → githost (credential helper)
+workflow → database (activities), domain, githost (PR/review API)
 All packages may use shared
 web → server (GraphQL only)
 ```

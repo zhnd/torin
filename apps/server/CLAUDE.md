@@ -20,6 +20,7 @@ GraphQL API entry point for the Torin system.
 
 - `@torin/database` — Prisma client, Pothos types
 - `@torin/workflow` — start and query workflows
+- `@torin/githost` — `parseRepoUrl` for project URL/provider validation in services
 - `@torin/shared` — logger, utilities
 
 ## Internal structure
@@ -49,7 +50,7 @@ src/
 - **One service per operation** — no god services; class with `execute()` method
 - **Resolvers are thin** — instantiate service, call `service.execute(query, input, user)`, return result
 - **Services own business logic** — validation, authorization, Prisma operations
-- **Use error classes** from `infrastructure/errors/` (NotFoundError, UnauthorizedError)
+- **Use error classes** from `infrastructure/errors/` (NotFoundError, UnauthorizedError, ValidationError)
 - **Always spread `query`** in Prisma calls for Pothos N+1 optimization
 - **Register modules** in `infrastructure/graphql/schema.ts` via side-effect import
 

@@ -23,14 +23,27 @@ src/
     implement-resolution.ts # Agent-driven resolution implementation
     destroy-sandbox.ts      # Cleanup container
     push-branch.ts          # git push from sandbox
-    create-pull-request.ts  # Open PR via GitHub API
+    create-pull-request.ts  # Open PR via @torin/githost (GitHub or cnb.cool)
     add-pr-review-comments.ts
     save-task-events.ts     # Persist observation events
     update-task.ts          # Update Task status in DB
   client/
     index.ts                # TASK_QUEUE + SANDBOX_TASK_QUEUE + client factory
+  utils/
+    git-context.ts          # gitClientFor(project) — adapter from Project → GitHostClient
+    boot-verify.ts          # dev-server boot-and-probe used by filter-candidate
+    build-pr-body.ts        # PR body composition
+    precondition-check.ts   # repo precondition guardrails
+    retry-feedback.ts       # Reflexion-style retry context
+    scope-check.ts          # change-scope analysis
+    test-runner-detect.ts   # detect test runner from repo files
+    trivial-gate.ts         # trivial-class shortcut detection
   logger.ts                 # Package-level Pino logger
 ```
+
+## Git host access
+
+Activities that need the git host API (PR create, review comments) call `gitClientFor(project)` from `utils/git-context.ts`. It decrypts credentials, parses the repo URL, and returns a `GitHostClient` from `@torin/githost` bound to that project — methods take action args only. Activities that need provider/token but no API client (sandbox create, push-branch) gate on `project.encryptedCredentials` and read `client?.provider` / `client?.token` / `client?.botIdentity` off the same client. `gitClientFor` throws if there are no credentials, so callers that allow no-creds must do the conditional themselves.
 
 ## Two task queues (host-safety pattern)
 
@@ -49,6 +62,7 @@ When adding a new activity: if it connects to a sandbox (even briefly), put it o
 
 - `@torin/agent` — called from agent-driven activities
 - `@torin/sandbox` — create/connect/destroy sandboxes
+- `@torin/githost` — provider-aware PR / review-comment client + URL parsing
 - `@torin/database` — update Task records
 - `@torin/domain` — shared types
 - `@torin/shared` — logger

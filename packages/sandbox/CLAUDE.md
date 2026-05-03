@@ -81,14 +81,21 @@ All language toolchains come in through `mise` at tier-2 build time. A repo decl
 
 Callers (activities, agent tools) interact only with `Sandbox`, so new providers never require changes outside this package.
 
+## Provider-aware credential helper
+
+git over HTTPS authenticates differently per host (GitHub: `x-access-token`, cnb.cool: `cnb`). Callers pass `gitProvider` (`'github' | 'cnb'`, defaults to `'github'`) and `gitToken` into `createSandbox`/`connectSandbox`; the broker then writes the right helper script via `buildCredentialHelper(provider)`, which delegates to `@torin/githost`'s `gitCredentialsFor`. The token is injected as `TORIN_GIT_TOKEN` (unified across providers — provider distinction lives in the helper script's username, not the env var).
+
+`Source.provider` on the source descriptor is optional for the same reason — defaults to `'github'` so callers that don't care don't have to plumb it.
+
 ## Dependencies
 
+- `@torin/githost` — `GitHostProvider` type and `gitCredentialsFor` (helper script per provider)
 - `@torin/shared` — logger
 - Third-party: `dockerode`, `tar-stream`
 
 ## Key constraints
 
-- `getState()` never includes secrets. Tokens flow through env only (credential helper reads `$GH_TOKEN` at git command time)
+- `getState()` never includes secrets. Tokens flow through env only (credential helper reads `$TORIN_GIT_TOKEN` at git command time)
 - `stop()` is idempotent and always runs `beforeStop` hook
 - `exec()` returns `ExecResult` with `success: false` for timeouts instead of throwing
 - `.mise.toml` / `.tool-versions` only honored at repo root; monorepo users orchestrate via root-level setup
