@@ -1,8 +1,7 @@
+import { ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 import { Dot } from '@/components/common/dot';
 import { EmptyState } from '@/components/common/empty-state';
-import { StageTag } from '@/components/common/stage-tag';
-import { Button } from '@/components/ui/button';
 
 export interface AwaitingReviewRow {
   id: string;
@@ -26,77 +25,65 @@ const RISK_COLOR: Record<string, string> = {
   critical: 'var(--danger)',
 };
 
+/**
+ * Awaiting-review list — used inside a PanelCard with `noPad`. Each row
+ * is a tappable Link card; right side has the wait time + an arrow that
+ * appears on hover.
+ */
 export function AwaitingReviewTable({ rows }: AwaitingReviewTableProps) {
   if (rows.length === 0) {
     return (
-      <EmptyState
-        title="Nothing awaiting review"
-        description="All tasks are currently queued, running, or completed."
-      />
+      <div className="px-4 py-7">
+        <EmptyState
+          title="Nothing awaiting review"
+          description="All tasks are currently queued, running, or completed."
+        />
+      </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-surface">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr>
-            {['Task', 'Project', 'Stage', 'Risk', 'Waited', ''].map((h) => (
-              <th
-                key={h}
-                className="whitespace-nowrap border-b border-border px-3 py-2 text-left text-[11px] font-medium text-foreground-subtle"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="[&_tr:last-child_td]:border-b-0">
-          {rows.map((t) => (
-            <tr
-              key={t.id}
-              className="group cursor-pointer transition-colors hover:bg-surface-2"
-            >
-              <td className="border-b border-border px-3 py-2.5 align-middle">
-                <Link
-                  href={`/tasks/${t.id}`}
-                  className="flex items-center gap-2.5 text-foreground no-underline"
-                >
-                  <Dot className="sv-awaiting" size={6} pulse />
-                  <div>
-                    <div className="font-medium">{t.title}</div>
-                    <div className="mt-0.5 font-mono text-[11px] text-foreground-subtle">
-                      {t.id} · {t.branch}
-                    </div>
-                  </div>
-                </Link>
-              </td>
-              <td className="border-b border-border px-3 py-2.5 align-middle font-mono text-[12px] text-foreground-muted">
-                {t.projectName}
-              </td>
-              <td className="border-b border-border px-3 py-2.5 align-middle">
-                <StageTag stage={t.stage} />
-              </td>
-              <td className="border-b border-border px-3 py-2.5 align-middle">
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-foreground-muted">
-                  <Dot color={RISK_COLOR[t.risk] ?? RISK_COLOR.low} size={6} />
-                  {t.risk}
+    <ol className="divide-y divide-border-faint">
+      {rows.map((t) => (
+        <li key={t.id}>
+          <Link
+            href={`/tasks/${t.id}`}
+            className="group flex items-center gap-4 px-4 py-3 no-underline transition-colors hover:bg-surface-2"
+          >
+            <Dot className="sv-awaiting" size={6} pulse />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-semibold text-foreground">
+                  {t.title}
                 </span>
-              </td>
-              <td className="border-b border-border px-3 py-2.5 align-middle font-mono text-[12px] text-foreground-muted">
+                <span className="rounded-sm border border-border bg-surface-cream px-1.5 py-px font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-foreground-muted">
+                  {t.stage}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-2.5 font-mono text-[10.5px] text-foreground-subtle">
+                <span>{t.projectName}</span>
+                <span aria-hidden="true">·</span>
+                <span>{t.branch}</span>
+              </div>
+            </div>
+            <span className="hidden items-center gap-1.5 text-[11.5px] text-foreground-muted md:inline-flex">
+              <Dot color={RISK_COLOR[t.risk] ?? RISK_COLOR.low} size={5} />
+              {t.risk}
+            </span>
+            <div className="text-right">
+              <div className="font-mono text-[11.5px] font-medium text-foreground">
                 {t.waited}
-              </td>
-              <td className="border-b border-border px-3 py-2.5 align-middle">
-                <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
-                  <Button asChild size="sm">
-                    <Link href={`/tasks/${t.id}`}>Review</Link>
-                  </Button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.04em] text-foreground-subtle">
+                waiting
+              </div>
+            </div>
+            <span className="text-foreground-faint transition-colors group-hover:text-foreground">
+              <ArrowUpRight className="h-4 w-4" />
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ol>
   );
 }

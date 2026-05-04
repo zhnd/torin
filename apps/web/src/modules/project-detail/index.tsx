@@ -3,10 +3,12 @@
 import { Bug, Play, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { MetaRow } from '@/components/common/meta-row';
+import { PanelCard } from '@/components/common/panel-card';
 import { ProjectAvatar } from '@/components/common/project-avatar';
-import { SectionHead } from '@/components/common/section-head';
 import { StatusChip } from '@/components/common/status-chip';
+import { Tally } from '@/components/common/tally';
 import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
 import { ProjectForm } from '@/components/project-form';
 import { Button } from '@/components/ui/button';
 import {
@@ -51,7 +53,14 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-330 px-4 py-4 md:px-10 md:py-8">
+      <PageHeader
+        segments={[
+          { label: 'Projects', href: '/projects' },
+          { label: project?.name ?? 'Loading…' },
+        ]}
+      />
+
+      <div className="px-7 py-7 lg:px-9 lg:py-8">
         {loading ? (
           <div className="py-10 text-center text-[12px] text-foreground-subtle">
             Loading…
@@ -66,28 +75,22 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
           </div>
         ) : (
           <div>
-            <div className="mb-3.5 flex items-center gap-2 text-[13px]">
-              <Link
-                href="/projects"
-                className="text-foreground-muted no-underline hover:text-foreground"
-              >
-                Projects
-              </Link>
-              <span className="text-foreground-subtle">/</span>
-              <span className="text-foreground">{project.name}</span>
-            </div>
-
-            <div className="mb-6 flex items-center gap-5 rounded-md border border-border bg-surface px-6 py-5">
-              <ProjectAvatar name={project.name} size={56} />
+            <div className="mb-6 flex items-center gap-4">
+              <ProjectAvatar name={project.name} size={48} />
               <div className="min-w-0 flex-1">
-                <h1 className="m-0 text-[24px] font-semibold tracking-[-0.025em]">
+                <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-foreground-subtle">
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-foreground-faint" />
+                  project · {project.id.slice(-6)}
+                </div>
+                <h1 className="m-0 text-[24px] font-semibold leading-[1.1] tracking-normal text-foreground">
                   {project.name}
                 </h1>
-                <div className="mt-1 flex flex-wrap gap-3.5 font-mono text-[12px] text-foreground-subtle">
+                <div className="mt-1.5 flex flex-wrap gap-2.5 font-mono text-[10.5px] text-foreground-subtle">
                   <span>
                     {project.repositoryUrl.replace(/^https?:\/\//, '')}
                   </span>
-                  <span>↻ updated {relativeTime(project.updatedAt)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>updated {relativeTime(project.updatedAt)}</span>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -137,77 +140,73 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
               </div>
             </div>
 
-            <div className="mb-5 flex border-b border-border">
+            <Tally className="mb-5" />
+
+            <div className="mb-5 flex border-b border-border-faint">
               {DETAIL_TABS.map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setTab(key)}
                   className={cn(
-                    '-mb-px cursor-pointer border-none bg-transparent px-3.5 py-2 text-[12.5px] transition-colors',
+                    '-mb-px relative cursor-pointer border-none bg-transparent px-3.5 py-2.5 text-[12.5px] transition-colors',
                     tab === key
-                      ? 'border-b-[1.5px] border-foreground font-semibold text-foreground'
-                      : 'border-b-[1.5px] border-transparent font-medium text-foreground-muted hover:text-foreground'
+                      ? 'font-semibold text-foreground'
+                      : 'font-medium text-foreground-muted hover:text-foreground'
                   )}
                 >
                   {label}
+                  {tab === key && (
+                    <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-accent" />
+                  )}
                 </button>
               ))}
             </div>
 
             {tab === 'overview' && (
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_1fr]">
-                <div>
-                  <SectionHead
-                    title="Recent tasks"
-                    action={
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setTab('tasks')}
-                      >
-                        View all
-                      </Button>
-                    }
-                  />
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
+                <PanelCard
+                  title="Recent tasks"
+                  action={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTab('tasks')}
+                      className="h-7 text-[11.5px]"
+                    >
+                      View all
+                    </Button>
+                  }
+                  noPad
+                >
                   {recentTasks.length === 0 ? (
-                    <div className="rounded-md border border-border bg-surface px-4 py-8 text-center text-[12.5px] text-foreground-muted">
+                    <div className="px-4 py-8 text-center text-[12.5px] text-foreground-muted">
                       No tasks yet. Create a defect or run an analysis.
                     </div>
                   ) : (
-                    <div className="overflow-hidden rounded-md border border-border bg-surface">
-                      <table className="w-full border-collapse">
-                        <tbody className="[&_tr:last-child_td]:border-b-0">
-                          {recentTasks.map((t) => (
-                            <tr
-                              key={t.id}
-                              className="cursor-pointer transition-colors hover:bg-surface-2"
-                            >
-                              <td className="w-32.5 border-b border-border px-3 py-2.5">
-                                <StatusChip status={t.status} />
-                              </td>
-                              <td className="border-b border-border px-3 py-2.5">
-                                <Link
-                                  href={`/tasks/${t.id}`}
-                                  className="text-foreground no-underline"
-                                >
-                                  {t.type.toLowerCase().replace(/_/g, ' ')}
-                                </Link>
-                              </td>
-                              <td className="border-b border-border px-3 py-2.5 text-right font-mono text-[11px] text-foreground-subtle">
-                                {relativeTime(t.createdAt)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <ol className="divide-y divide-border-faint">
+                      {recentTasks.map((t) => (
+                        <li key={t.id}>
+                          <Link
+                            href={`/tasks/${t.id}`}
+                            className="flex items-center gap-3 px-4 py-3 no-underline hover:bg-surface-2"
+                          >
+                            <StatusChip status={t.status} />
+                            <span className="flex-1 text-[12.5px] font-medium text-foreground">
+                              {t.type.toLowerCase().replace(/_/g, ' ')}
+                            </span>
+                            <span className="font-mono text-[11px] text-foreground-subtle">
+                              {relativeTime(t.createdAt)}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ol>
                   )}
-                </div>
+                </PanelCard>
 
-                <aside>
-                  <SectionHead title="Project metadata" />
-                  <div className="rounded-md border border-border bg-surface px-4 py-1">
+                <PanelCard title="Project metadata" noPad>
+                  <div className="px-4 py-1">
                     <MetaRow
                       label="Repository"
                       value={project.repositoryUrl.replace(/^https?:\/\//, '')}
@@ -232,24 +231,28 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                       last
                     />
                   </div>
-                </aside>
+                </PanelCard>
               </div>
             )}
 
-            {tab === 'tasks' &&
-              (sortedTasks.length === 0 ? (
-                <div className="rounded-md border border-border bg-surface px-4 py-10 text-center text-[12.5px] text-foreground-muted">
-                  No tasks yet. Run an analysis to create the first task.
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-md border border-border bg-surface">
+            {tab === 'tasks' && (
+              <PanelCard
+                title="All tasks"
+                caption={`${sortedTasks.length} total`}
+                noPad
+              >
+                {sortedTasks.length === 0 ? (
+                  <div className="px-4 py-10 text-center text-[12.5px] text-foreground-muted">
+                    No tasks yet. Run an analysis to create the first task.
+                  </div>
+                ) : (
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr>
+                      <tr className="border-b border-border-faint bg-surface-cream/40">
                         {['Status', 'Task', 'Created'].map((h) => (
                           <th
                             key={h}
-                            className="whitespace-nowrap border-b border-border px-3 py-2 text-left text-[11px] font-medium text-foreground-subtle"
+                            className="whitespace-nowrap px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-foreground-subtle"
                           >
                             {h}
                           </th>
@@ -262,100 +265,92 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                           key={t.id}
                           className="cursor-pointer transition-colors hover:bg-surface-2"
                         >
-                          <td className="w-32.5 border-b border-border px-3 py-2.5">
+                          <td className="w-32.5 border-b border-border-faint px-4 py-2.5">
                             <StatusChip status={t.status} />
                           </td>
-                          <td className="border-b border-border px-3 py-2.5">
+                          <td className="border-b border-border-faint px-4 py-2.5">
                             <Link
                               href={`/tasks/${t.id}`}
                               className="text-foreground no-underline"
                             >
                               {t.type.toLowerCase().replace(/_/g, ' ')}
                             </Link>
-                            <div className="mt-0.5 font-mono text-[11px] text-foreground-subtle">
+                            <div className="mt-0.5 font-mono text-[10.5px] text-foreground-subtle">
                               {t.id}
                             </div>
                           </td>
-                          <td className="border-b border-border px-3 py-2.5 text-right font-mono text-[11px] text-foreground-subtle">
+                          <td className="border-b border-border-faint px-4 py-2.5 text-right font-mono text-[11px] text-foreground-subtle">
                             {new Date(t.createdAt).toLocaleDateString()}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
-              ))}
+                )}
+              </PanelCard>
+            )}
 
             {tab === 'settings' && (
-              <div className="max-w-160 space-y-6">
-                <div>
-                  <SectionHead
-                    title="Project configuration"
-                    subtitle="Edit repository, credentials, preview"
+              <div className="max-w-170 space-y-4">
+                <PanelCard
+                  title="Project configuration"
+                  caption="repository · credentials · preview"
+                >
+                  <ProjectForm
+                    mode="edit"
+                    projectId={project.id}
+                    defaultValues={{
+                      name: project.name,
+                      repositoryUrl: project.repositoryUrl,
+                      authProvider:
+                        project.authProvider === 'CNB' ? 'CNB' : 'GITHUB',
+                      previewCommand: project.previewCommand ?? '',
+                      previewPort:
+                        project.previewPort != null
+                          ? String(project.previewPort)
+                          : '',
+                      previewReadyPattern: project.previewReadyPattern ?? '',
+                    }}
                   />
-                  <div className="rounded-md border border-border bg-surface p-5">
-                    <ProjectForm
-                      mode="edit"
-                      projectId={project.id}
-                      defaultValues={{
-                        name: project.name,
-                        repositoryUrl: project.repositoryUrl,
-                        authProvider:
-                          project.authProvider === 'CNB' ? 'CNB' : 'GITHUB',
-                        previewCommand: project.previewCommand ?? '',
-                        previewPort:
-                          project.previewPort != null
-                            ? String(project.previewPort)
-                            : '',
-                        previewReadyPattern: project.previewReadyPattern ?? '',
-                      }}
-                    />
-                  </div>
-                </div>
+                </PanelCard>
 
-                <div>
-                  <SectionHead
-                    title="Danger zone"
-                    subtitle="Irreversible actions"
-                  />
-                  <div className="rounded-md border border-border bg-surface p-5">
-                    <p className="m-0 mb-3 text-[12px] text-foreground-muted">
-                      Deletes the project and all associated tasks. This cannot
-                      be undone.
-                    </p>
-                    <Dialog>
-                      <DialogTrigger asChild>
+                <PanelCard title="Danger zone" caption="irreversible actions">
+                  <p className="m-0 mb-3 text-[12px] text-foreground-muted">
+                    Deletes the project and all associated tasks. This cannot be
+                    undone.
+                  </p>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleting}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                        Delete project
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Delete project?</DialogTitle>
+                        <DialogDescription>
+                          This will permanently delete &quot;{project.name}
+                          &quot; and all associated tasks. This action cannot be
+                          undone.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter>
                         <Button
                           variant="destructive"
-                          size="sm"
+                          onClick={removeProject}
                           disabled={deleting}
                         >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" />
-                          Delete project
+                          {deleting ? 'Deleting…' : 'Delete'}
                         </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Delete project?</DialogTitle>
-                          <DialogDescription>
-                            This will permanently delete &quot;{project.name}
-                            &quot; and all associated tasks. This action cannot
-                            be undone.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                          <Button
-                            variant="destructive"
-                            onClick={removeProject}
-                            disabled={deleting}
-                          >
-                            {deleting ? 'Deleting…' : 'Delete'}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                </div>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </PanelCard>
               </div>
             )}
           </div>

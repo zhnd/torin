@@ -5,7 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/utils/cn';
 import { LANES } from './constants';
-import type { Lane, LaneMeta, ReviewFormVariant, ReviewSubmitPayload } from './types';
+import type {
+  Lane,
+  LaneMeta,
+  ReviewFormVariant,
+  ReviewSubmitPayload,
+} from './types';
 import { useService } from './use-service';
 
 interface ReviewFormProps {

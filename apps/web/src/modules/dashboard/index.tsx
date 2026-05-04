@@ -1,60 +1,94 @@
 'use client';
 
+import {
+  ArrowUpRight,
+  Clock4,
+  GitMerge,
+  Plus,
+  Sparkles,
+  Workflow,
+  ZapOff,
+} from 'lucide-react';
 import Link from 'next/link';
-import { MetricCard } from '@/components/common/metric-card';
-import { SectionHead } from '@/components/common/section-head';
+import { PanelCard } from '@/components/common/panel-card';
+import { StatTile } from '@/components/common/stat-tile';
+import { Tally } from '@/components/common/tally';
 import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { AwaitingReviewTable } from './components/awaiting-review-table';
 import { RecentActivity } from './components/recent-activity';
 import { useService } from './use-service';
 
 export function Dashboard() {
-  const { loading, projects, summary, awaitingRows, activityRows } =
-    useService();
+  const {
+    loading,
+    projects,
+    summary,
+    awaitingRows,
+    activityRows,
+    stageDistribution,
+    projectActivity,
+  } = useService();
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-330 px-4 py-4 md:px-10 md:py-8">
-        {/* Header */}
-        <div className="mb-7">
-          <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">
-            Dashboard
-          </h1>
-          <p className="mt-1 text-[13px] text-foreground-muted">
-            {projects.length} {projects.length === 1 ? 'project' : 'projects'} ·
-            last 7 days
-          </p>
+      <PageHeader
+        segments={[{ label: 'Dashboard' }]}
+        actions={
+          <Button asChild size="sm" variant="default" className="h-8">
+            <Link href="/projects/new">
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Connect repo
+            </Link>
+          </Button>
+        }
+      />
+
+      <div className="px-6 py-6 lg:px-7 lg:py-7">
+        {/* Hero — mono eyebrow + sans hero, period selector right */}
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="mb-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-foreground-subtle">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-accent torin-pulse" />
+              live · auto-refresh
+            </div>
+            <h1 className="m-0 text-[26px] font-semibold leading-[1.05] tracking-normal text-foreground">
+              Operations
+            </h1>
+            <p className="mt-1.5 max-w-110 text-[12.5px] text-foreground-muted">
+              Agent workforce across {projects.length}{' '}
+              {projects.length === 1 ? 'project' : 'projects'} · auto-refreshed
+              every 5s.
+            </p>
+          </div>
         </div>
 
-        {/* Metrics row */}
-        <div className="mb-7 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-          <MetricCard
-            label="Awaiting your review"
+        {/* Stat tiles row */}
+        <div className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4 xl:grid-cols-5">
+          <StatTile
+            index="01"
+            label="Awaiting review"
             value={loading ? '—' : summary.awaitingCount}
-            emphasis
             hint={
               summary.awaitingCount > 0
-                ? `${summary.awaitingCount} ${summary.awaitingCount === 1 ? 'task' : 'tasks'} need you`
-                : 'All clear'
+                ? `${summary.awaitingCount} ${summary.awaitingCount === 1 ? 'task needs' : 'tasks need'} you`
+                : 'All clear · nothing waiting'
             }
+            icon={Clock4}
+            emphasis={summary.awaitingCount > 0}
+            href="/tasks?status=AWAITING_REVIEW"
           />
-          <MetricCard
+          <StatTile
+            index="02"
             label="Active tasks"
             value={loading ? '—' : summary.activeCount}
             hint={`${summary.runningCount} running · ${summary.queuedCount} queued`}
+            icon={Workflow}
+            href="/tasks?status=RUNNING"
           />
-          <MetricCard
-            label="This week's cost"
-            value={
-              loading
-                ? '—'
-                : `$${summary.weeklyCost.toFixed(summary.weeklyCost < 10 ? 2 : 0)}`
-            }
-            hint={`${summary.recentTaskCount} ${summary.recentTaskCount === 1 ? 'task' : 'tasks'} in 7d`}
-            sparkTone="accent"
-          />
-          <MetricCard
+          <StatTile
+            index="03"
             label="Success rate"
             value={
               loading
@@ -68,32 +102,221 @@ export function Dashboard() {
                 ? `${summary.completedCount}/${summary.completedCount + summary.failedCount} merged`
                 : 'No outcomes yet'
             }
+            icon={GitMerge}
+            href="/tasks?status=COMPLETED"
+          />
+          <StatTile
+            index="04"
+            label="Failures · 7d"
+            value={loading ? '—' : summary.failedCount}
+            hint={
+              summary.failedCount > 0
+                ? `Investigate the failed runs`
+                : 'No failures recorded'
+            }
+            icon={ZapOff}
+            emphasis={summary.failedCount > 0}
+            tone="danger"
+            href="/tasks?status=FAILED"
+          />
+          <StatTile
+            index="05"
+            label="Tokens · today"
+            value={loading ? '—' : '24.6k'}
+            hint="across 12 runs · $4.31"
+            icon={Sparkles}
+            trailing={
+              <span className="font-mono text-[9.5px] font-medium text-ok">
+                ▲ 12%
+              </span>
+            }
           />
         </div>
 
-        {/* Awaiting review */}
-        <section className="mb-8">
-          <SectionHead
-            title="Awaiting your review"
-            subtitle="Ordered by oldest first"
+        {/* Three-column secondary panels */}
+        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <PanelCard
+            title="Stage distribution"
+            caption={`${summary.activeCount} active`}
+          >
+            <StageDistribution
+              rows={stageDistribution}
+              total={summary.activeCount}
+            />
+          </PanelCard>
+
+          <PanelCard
+            title="Project activity"
             action={
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/tasks?status=AWAITING_REVIEW">View all</Link>
+              <Link
+                href="/projects"
+                className="font-mono text-[10.5px] text-foreground-muted no-underline hover:text-foreground"
+              >
+                view all
+              </Link>
+            }
+          >
+            <ProjectActivity rows={projectActivity} />
+          </PanelCard>
+
+          <PanelCard title="Agent pool" caption="03/08 engaged">
+            <AgentPool />
+          </PanelCard>
+        </div>
+
+        {/* Awaiting + Recent activity, side-by-side at xl, stacked otherwise */}
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr]">
+          <PanelCard
+            title="Awaiting your review"
+            caption={`${summary.awaitingCount} ${summary.awaitingCount === 1 ? 'task' : 'tasks'}`}
+            action={
+              <Button variant="ghost" size="sm" asChild className="h-7">
+                <Link
+                  href="/tasks?status=AWAITING_REVIEW"
+                  className="text-[11.5px]"
+                >
+                  View all
+                  <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
               </Button>
             }
-          />
-          <AwaitingReviewTable rows={awaitingRows} />
-        </section>
+            noPad
+          >
+            <AwaitingReviewTable rows={awaitingRows} />
+          </PanelCard>
 
-        {/* Recent activity */}
-        <section>
-          <SectionHead
-            title="Recent activity"
-            subtitle="Last 10 task transitions"
-          />
-          <RecentActivity rows={activityRows} />
-        </section>
+          <PanelCard title="Recent activity" caption="last 10" noPad>
+            <RecentActivity rows={activityRows} />
+          </PanelCard>
+        </div>
       </div>
     </AppShell>
+  );
+}
+
+// ── Sub-widgets local to dashboard ──────────────────────────────────
+
+function StageDistribution({
+  rows,
+  total,
+}: {
+  rows: { key: string; label: string; count: number; percent: number }[];
+  total: number;
+}) {
+  return (
+    <div className="space-y-2">
+      {rows.map((r) => (
+        <div key={r.key} className="flex items-center gap-3">
+          <span className="w-19 text-[12px] font-medium text-foreground">
+            {r.label}
+          </span>
+          <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-surface-inset">
+            <span
+              className="absolute inset-y-0 left-0 rounded-full bg-foreground transition-[width] duration-500"
+              style={{ width: `${Math.max(r.count > 0 ? 4 : 0, r.percent)}%` }}
+            />
+          </div>
+          <span className="w-7 text-right font-mono text-[11px] tabular-nums text-foreground-muted">
+            {r.count}
+          </span>
+        </div>
+      ))}
+      {total === 0 && (
+        <div className="py-1 text-center text-[11.5px] text-foreground-subtle">
+          No active tasks
+        </div>
+      )}
+      <Tally className="mt-3" />
+    </div>
+  );
+}
+
+function ProjectActivity({
+  rows,
+}: {
+  rows: {
+    id: string;
+    name: string;
+    total: number;
+    active: number;
+    awaiting: number;
+  }[];
+}) {
+  if (rows.length === 0) {
+    return (
+      <div className="py-2 text-center text-[11.5px] text-foreground-subtle">
+        No projects yet
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2.5">
+      {rows.map((p) => (
+        <Link
+          key={p.id}
+          href={`/projects/${p.id}`}
+          className="-mx-1 flex items-center gap-2.5 rounded-sm px-1 py-0.5 no-underline transition-colors hover:bg-surface-2"
+        >
+          <span
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-[11px] font-bold text-background"
+            style={{ background: 'oklch(0.32 0.02 70)' }}
+          >
+            {p.name.charAt(0).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
+            {p.name}
+          </span>
+          {p.awaiting > 0 && (
+            <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent-ink">
+              {p.awaiting} ●
+            </span>
+          )}
+          <span className="font-mono text-[11px] text-foreground-muted">
+            {p.active}/{p.total}
+          </span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function AgentPool() {
+  return (
+    <div>
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-[28px] font-medium leading-none tabular-nums tracking-normal text-foreground">
+          03<span className="text-foreground-faint">/08</span>
+        </span>
+        <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-foreground-muted">
+          engaged
+        </span>
+      </div>
+      <div className="mt-3 flex h-1 gap-px overflow-hidden rounded-full bg-border-faint">
+        <span className="h-full bg-accent" style={{ width: '37.5%' }} />
+        <span className="h-full bg-foreground/15" style={{ width: '62.5%' }} />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <PoolStat label="queue" value="14s" />
+        <PoolStat label="thru" value="6/h" />
+        <PoolStat label="err" value="0" />
+      </div>
+      <Tally className="mt-3" />
+      <p className="mt-3 text-[11.5px] text-foreground-subtle">
+        Capacity scales automatically when queue depth exceeds 8.
+      </p>
+    </div>
+  );
+}
+
+function PoolStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="font-mono text-[13px] font-medium tabular-nums text-foreground">
+        {value}
+      </div>
+      <div className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-foreground-subtle">
+        {label}
+      </div>
+    </div>
   );
 }

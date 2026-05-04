@@ -26,10 +26,21 @@ export function countByStatus(
 
 export function filterTasks(
   tasks: TaskListRow[],
-  status: TaskListStatusFilter
+  status: TaskListStatusFilter,
+  query = ''
 ): TaskListRow[] {
-  if (status === 'all') return tasks;
-  return tasks.filter((t) => t.status === status);
+  const normalized = query.trim().toLowerCase();
+  const byStatus =
+    status === 'all' ? tasks : tasks.filter((t) => t.status === status);
+  if (!normalized) return byStatus;
+
+  return byStatus.filter((t) => {
+    const haystack = [t.id, t.type, t.status, t.currentStage, t.project?.name]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalized);
+  });
 }
 
 export function formatDuration(ms: number | null): string {

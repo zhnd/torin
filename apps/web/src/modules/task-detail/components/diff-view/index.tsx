@@ -219,12 +219,14 @@ export function DiffView({ patch }: { patch: string }) {
 function UnifiedDiff({ file, wrap }: { file: ParsedFile; wrap: boolean }) {
   return (
     <div className="font-mono text-[12px] leading-[1.55]">
-      {/* biome-ignore lint/suspicious/noArrayIndexKey: hunks are ordered and never reordered */}
       {file.hunks.map((h, hi) => {
         let oldLn = h.oldStart;
         let newLn = h.newStart;
         return (
-          <div key={hi}>
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: hunks are ordered and never reordered
+            key={hi}
+          >
             <HunkHeader
               context={h.context}
               oldStart={h.oldStart}
@@ -256,8 +258,8 @@ function UnifiedDiff({ file, wrap }: { file: ParsedFile; wrap: boolean }) {
                     ? 'var(--danger)'
                     : 'var(--foreground)';
               return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: stable line order
                 <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: stable line order in unified diff
                   key={`${hi}-${i}`}
                   className="flex"
                   style={{ background: bg }}
@@ -301,7 +303,6 @@ interface SplitCell {
 function SplitDiff({ file, wrap }: { file: ParsedFile; wrap: boolean }) {
   return (
     <div className="font-mono text-[12px] leading-[1.55]">
-      {/* biome-ignore lint/suspicious/noArrayIndexKey: hunks are ordered */}
       {file.hunks.map((h, hi) => {
         const pairs: Array<{
           left: SplitCell | null;
@@ -349,15 +350,21 @@ function SplitDiff({ file, wrap }: { file: ParsedFile; wrap: boolean }) {
           }
         }
         return (
-          <div key={hi}>
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: hunks are ordered and never reordered
+            key={hi}
+          >
             <HunkHeader
               context={h.context}
               oldStart={h.oldStart}
               first={hi === 0}
             />
-            {/* biome-ignore lint/suspicious/noArrayIndexKey: stable pair order */}
             {pairs.map((p, pi) => (
-              <div key={`${hi}-${pi}`} className="grid grid-cols-2">
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: stable pair order in split diff
+                key={`${hi}-${pi}`}
+                className="grid grid-cols-2"
+              >
                 <SplitHalf cell={p.left} wrap={wrap} side="left" />
                 <SplitHalf cell={p.right} wrap={wrap} side="right" />
               </div>

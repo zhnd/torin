@@ -112,7 +112,7 @@ function MetricBlock({
         {label}
       </div>
       <div
-        className="mt-2.5 font-mono font-bold leading-none tabular-nums tracking-[-0.02em]"
+        className="mt-2.5 font-mono font-bold leading-none tabular-nums tracking-normal"
         style={{
           color: color ?? 'var(--foreground)',
           fontSize: emphasize ? '32px' : '30px',
@@ -230,11 +230,11 @@ function GanttPanel({
                   opacity={0.5}
                 />
                 {/* Segments for this row */}
-                {/* biome-ignore lint/suspicious/noArrayIndexKey: segments ordered by time */}
                 {segments
                   .filter((seg) => seg.stage === s.key)
                   .map((seg, j) => (
                     <Segment
+                      // biome-ignore lint/suspicious/noArrayIndexKey: segments are ordered by time within a single render
                       key={`${s.key}-${j}`}
                       seg={seg}
                       y={y}

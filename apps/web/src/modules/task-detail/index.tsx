@@ -1,5 +1,6 @@
 'use client';
 
+import { GitBranch, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { CheckTable } from '@/components/common/check-table';
 import { Chip } from '@/components/common/chip';
@@ -16,7 +17,9 @@ import {
   StageTrack,
 } from '@/components/common/stage-track';
 import { StatusChip } from '@/components/common/status-chip';
+import { Tally } from '@/components/common/tally';
 import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
 import { cn } from '@/utils/cn';
 import { DiffView } from './components/diff-view';
 import { RetrospectiveView } from './components/retrospective-view';
@@ -58,8 +61,11 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
   if (loading && !detail) {
     return (
       <AppShell scroll={false}>
-        <div className="py-10 text-center text-[12px] text-foreground-subtle">
-          Loading…
+        <PageHeader
+          segments={[{ label: 'Tasks', href: '/tasks' }, { label: 'Loading…' }]}
+        />
+        <div className="flex flex-1 items-center justify-center text-[12px] text-foreground-subtle">
+          Loading task…
         </div>
       </AppShell>
     );
@@ -67,65 +73,89 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
   if (!detail) {
     return (
       <AppShell scroll={false}>
-        <div className="py-10 text-center text-[12.5px] text-foreground-muted">
+        <PageHeader
+          segments={[
+            { label: 'Tasks', href: '/tasks' },
+            { label: 'Not found' },
+          ]}
+        />
+        <div className="flex flex-1 items-center justify-center text-[12.5px] text-foreground-muted">
           Task not found
         </div>
       </AppShell>
     );
   }
 
-  const latestEvent = detail.timeline[detail.timeline.length - 1];
-
   return (
     <AppShell scroll={false}>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <div className="border-b border-border px-7 pt-4">
-          <div className="mb-1.5 flex items-center gap-2.5">
-            <a
-              href="/tasks"
-              className="text-[13px] text-foreground-muted no-underline"
-            >
-              Tasks
-            </a>
-            <span className="text-foreground-subtle">/</span>
-            <span className="font-mono text-[12.5px] text-foreground-subtle">
+        <PageHeader
+          segments={[
+            { label: 'Tasks', href: '/tasks' },
+            { label: taskId.length > 12 ? `tsk_${taskId.slice(-6)}` : taskId },
+          ]}
+          actions={<OverflowMenu />}
+        />
+
+        {/* Hero */}
+        <div className="border-b border-border-faint bg-card px-4 pt-5 pb-3 sm:px-6 lg:px-7">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <StatusChip status={detail.task.status.toUpperCase()} />
+            <span className="font-mono text-[10.5px] tabular-nums text-foreground-subtle">
               {taskId}
             </span>
-            <span className="text-foreground-subtle">·</span>
-            <StatusChip status={detail.task.status.toUpperCase()} />
+            {detail.task.repo && (
+              <span className="inline-flex items-center gap-1.25 rounded-sm border border-border-faint bg-surface-2 px-1.75 py-0.25 font-mono text-[10.5px] text-foreground-muted">
+                <GitBranch className="h-2.75 w-2.75" />
+                {detail.task.repo.replace(/^https?:\/\/github\.com\//, '')}
+              </span>
+            )}
           </div>
-          <div className="flex items-start justify-between gap-5 pb-3">
+          <div className="flex items-start justify-between gap-5">
             <div className="min-w-0 flex-1">
-              <h1 className="m-0 text-[19px] font-semibold tracking-[-0.015em]">
+              <h1 className="m-0 max-w-200 text-[22px] font-semibold leading-[1.2] tracking-normal text-foreground">
                 {detail.summary.description || detail.task.title}
               </h1>
-              <div className="mt-1.5 flex flex-wrap gap-3 font-mono text-[11.5px] text-foreground-subtle">
-                {detail.task.projectName && (
-                  <span>{detail.task.projectName}</span>
-                )}
-                {detail.task.repo && <span>{detail.task.repo}</span>}
-                {detail.task.model && <span>{detail.task.model}</span>}
-              </div>
+              {(detail.task.projectName || detail.task.model) && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.04em] text-foreground-subtle">
+                  {detail.task.projectName && (
+                    <span className="text-foreground-muted">
+                      {detail.task.projectName}
+                    </span>
+                  )}
+                  {detail.task.model && (
+                    <>
+                      <span className="text-foreground-faint">·</span>
+                      <span>{detail.task.model}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="flex items-start gap-5">
-              <Stat label="Duration" value={detail.task.duration} />
-              <Stat label="Cost" value={detail.task.cost} />
+            <div className="hidden items-stretch gap-0 rounded-sm border border-border bg-card md:flex">
+              <Stat label="DUR" value={detail.task.duration} />
+              <span className="my-2 w-px bg-border-faint" />
+              <Stat label="COST" value={detail.task.cost} />
+              <span className="my-2 w-px bg-border-faint" />
               <Stat
-                label="Tokens"
+                label="TOK"
                 value={formatTokens(detail.summary.totalTokens)}
               />
-              <OverflowMenu />
             </div>
           </div>
+          <Tally className="mt-3" />
+        </div>
+
+        <div className="overflow-x-auto border-b border-border bg-card px-4 sm:px-6 lg:px-7">
           <DetailTabsBar tab={tab} onChange={setTab} />
         </div>
 
         {/* Body */}
         {tab === 'overview' && (
-          <div className="grid min-h-0 flex-1 grid-cols-[232px_1fr] overflow-hidden">
-            <div className="overflow-y-auto border-r border-border p-3">
-              <div className="px-2.5 pb-3 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-foreground-subtle">
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[244px_1fr]">
+            <div className="max-h-64 overflow-y-auto border-b border-border-faint bg-surface-cream/30 p-3 lg:max-h-none lg:border-r lg:border-b-0">
+              <div className="flex items-center gap-1.5 px-2.5 pb-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground-subtle">
+                <span className="inline-block h-1 w-1 rounded-full bg-foreground-faint" />
                 Pipeline
               </div>
               <StageTrack
@@ -135,10 +165,11 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
                 list={DEFAULT_STAGES}
                 timings={timings}
               />
+              <Tally className="mt-4" />
             </div>
 
-            <div className="overflow-y-auto px-10 py-6">
-              <div className="mx-auto max-w-240 pb-12">
+            <div className="overflow-y-auto px-4 py-5 sm:px-6 lg:px-9 lg:py-7">
+              <div className="mx-auto max-w-220 pb-12">
                 <StageBody
                   stage={selectedStage}
                   status={stages[selectedStage]}
@@ -154,7 +185,7 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
         )}
 
         {tab === 'visual' && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-10 py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-10 lg:py-6">
             <div className="mx-auto max-w-300">
               <VisualView detail={detail} />
             </div>
@@ -162,7 +193,7 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
         )}
 
         {tab === 'events' && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-10 py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-10 lg:py-6">
             <div className="mx-auto max-w-240">
               <EventsView events={detail.timeline} />
             </div>
@@ -170,7 +201,7 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
         )}
 
         {tab === 'trace' && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-10 py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-10 lg:py-6">
             <div className="mx-auto max-w-300">
               <TraceView execution={detail.currentExecution} />
             </div>
@@ -178,7 +209,7 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
         )}
 
         {tab === 'retrospective' && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-10 py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-10 lg:py-6">
             <div className="mx-auto max-w-240">
               <RetrospectiveView
                 retrospective={detail.currentExecution?.retrospective ?? null}
@@ -186,16 +217,6 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
             </div>
           </div>
         )}
-
-        <ActivityBar
-          count={detail.timeline.length}
-          latest={latestEvent}
-          live={
-            detail.task.status === 'running' ||
-            detail.task.status === 'needs_review'
-          }
-          onShowAll={() => setTab('events')}
-        />
       </div>
     </AppShell>
   );
@@ -220,13 +241,16 @@ function DetailTabsBar({
             type="button"
             onClick={() => onChange(k)}
             className={cn(
-              '-mb-px cursor-pointer border-none bg-transparent px-3.5 py-2.5 text-[13px] transition-colors',
+              '-mb-px relative cursor-pointer border-none bg-transparent px-3 py-2.5 text-[12px] transition-colors',
               active
-                ? 'border-b-2 border-foreground font-semibold text-foreground'
-                : 'border-b-2 border-transparent font-medium text-foreground-muted hover:text-foreground'
+                ? 'font-semibold text-foreground'
+                : 'font-medium text-foreground-muted hover:text-foreground'
             )}
           >
             {l}
+            {active && (
+              <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-accent" />
+            )}
           </button>
         );
       })}
@@ -364,13 +388,14 @@ function StageHeader({
 }) {
   return (
     <div className="mb-5">
-      <div className="mb-0.5">
+      <div className="mb-1 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-foreground-subtle">
+        <span className="inline-block h-1 w-1 rounded-full bg-foreground-faint" />
         <StageTag stage={stage} />
       </div>
-      <h2 className="m-0 text-[17px] font-semibold tracking-[-0.015em]">
+      <h2 className="m-0 text-[20px] font-semibold leading-[1.15] tracking-normal text-foreground">
         {title}
       </h2>
-      {chips && <div className="mt-2 flex flex-wrap gap-3.5">{chips}</div>}
+      {chips && <div className="mt-2.5 flex flex-wrap gap-3.5">{chips}</div>}
     </div>
   );
 }
@@ -1072,59 +1097,6 @@ function EventsView({ events }: { events: TimelineEvent[] }) {
   );
 }
 
-// ── Activity bar ─────────────────────────────────────────────────────
-
-function ActivityBar({
-  count,
-  latest,
-  live,
-  onShowAll,
-}: {
-  count: number;
-  latest?: TimelineEvent;
-  live: boolean;
-  onShowAll?: () => void;
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-3 border-t border-border bg-sidebar px-5 py-2.5 font-mono text-[11px]">
-      <Dot className={live ? 'sv-running' : 'sv-done'} size={5} pulse={live} />
-      <span className="font-semibold uppercase tracking-[0.05em] text-foreground">
-        Agent stream
-      </span>
-      <span className="rounded-sm border border-border bg-surface px-1.5 py-px text-[10.5px] tabular-nums text-foreground-muted">
-        {count}
-      </span>
-      {latest ? (
-        <>
-          <span className="text-foreground-subtle">·</span>
-          <span className="text-foreground-subtle">
-            {new Date(latest.timestamp).toLocaleTimeString()}
-          </span>
-          <StageTag stage={latest.stage} />
-          {latest.tool && (
-            <span className="text-foreground-muted">{latest.tool}</span>
-          )}
-          <Dot color="var(--foreground-subtle)" size={3} />
-          <span className="min-w-0 flex-1 truncate font-sans text-[12px] text-foreground">
-            {latest.event}
-          </span>
-        </>
-      ) : (
-        <span className="flex-1 text-foreground-subtle">No events yet</span>
-      )}
-      {onShowAll && (
-        <button
-          type="button"
-          onClick={onShowAll}
-          className="shrink-0 cursor-pointer border-none bg-transparent font-sans text-[11.5px] text-foreground-muted hover:text-foreground"
-        >
-          Show all ↗
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ── Atoms ────────────────────────────────────────────────────────────
 
 function OverflowMenu() {
@@ -1132,20 +1104,20 @@ function OverflowMenu() {
     <button
       type="button"
       title="More actions"
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[var(--radius-sm)] border-none bg-transparent text-foreground-muted transition-colors hover:bg-surface-2"
+      className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-foreground-muted transition-colors hover:border-border-strong hover:text-foreground"
     >
-      ⋯
+      <MoreHorizontal className="h-3.5 w-3.5" />
     </button>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-15 whitespace-nowrap text-right">
-      <div className="text-[9.5px] font-semibold uppercase tracking-[0.05em] text-foreground-subtle">
+    <div className="min-w-19 whitespace-nowrap px-3 py-1.75 text-center">
+      <div className="font-mono text-[9.5px] font-medium uppercase tracking-[0.08em] text-foreground-subtle">
         {label}
       </div>
-      <div className="mt-1 font-mono text-[15px] font-semibold leading-none tabular-nums tracking-[-0.015em]">
+      <div className="mt-1 font-mono text-[16px] font-medium leading-none tabular-nums tracking-normal text-foreground">
         {value}
       </div>
     </div>

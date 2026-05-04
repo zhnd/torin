@@ -1,35 +1,38 @@
 'use client';
 
-import Link from 'next/link';
+import { PanelCard } from '@/components/common/panel-card';
 import { AppShell } from '@/components/layout/app-shell';
+import { PageHeader } from '@/components/layout/page-header';
 import { ProjectForm } from '@/components/project-form';
 
 export function ProjectNew() {
   return (
     <AppShell>
-      <div className="mx-auto max-w-190 px-4 py-4 md:px-10 md:py-8">
-        <div className="mb-3.5 flex items-center gap-2 text-[13px]">
-          <Link
-            href="/projects"
-            className="text-foreground-muted no-underline hover:text-foreground"
-          >
-            Projects
-          </Link>
-          <span className="text-foreground-subtle">/</span>
-          <span className="text-foreground">Connect repository</span>
-        </div>
+      <PageHeader
+        segments={[
+          { label: 'Projects', href: '/projects' },
+          { label: 'Connect repository' },
+        ]}
+      />
 
+      <div className="mx-auto max-w-200 px-6 py-6 lg:px-7 lg:py-7">
         <div className="mb-6">
-          <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">
-            Connect repository
+          <div className="mb-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-foreground-subtle">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+            repository setup
+          </div>
+          <h1 className="text-[24px] font-semibold leading-[1.1] tracking-normal text-foreground">
+            Connect a repository
           </h1>
-          <p className="m-0 mt-1 text-[13px] text-foreground-muted">
-            Point Torin at a GitHub repo so it can analyze, patch, and open pull
-            requests.
+          <p className="mt-1.5 text-[12.5px] text-foreground-muted">
+            Point Torin at a GitHub or cnb.cool repository so it can analyze,
+            patch, and open pull requests.
           </p>
         </div>
 
-        <ProjectForm mode="create" />
+        <PanelCard title="Repository details">
+          <ProjectForm mode="create" />
+        </PanelCard>
       </div>
     </AppShell>
   );

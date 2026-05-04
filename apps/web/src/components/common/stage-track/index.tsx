@@ -33,9 +33,17 @@ interface StageTrackProps {
 }
 
 /**
- * Vertical stage track used on the task detail page. Each row is a dot +
- * label + time. Click a row to route the detail pane. Thin connecting
- * line between dots darkens as stages complete.
+ * Vertical stage track. Each row is a dot + label + time. The connecting
+ * line between dots is positioned by `calc()` against the dot column so
+ * it stays mathematically centered no matter the row height.
+ *
+ * Geometry contract (kept stable so the line offset stays correct):
+ *   - row button: `px-2 py-1.5` (8px horizontal padding)
+ *   - dot is the first flex child with intrinsic size `h-3 w-3` (12px)
+ *   → dot center sits at 8 + 6 = 14px from row left.
+ *   - 1px line lives at left = 14 - 0.5 = 13.5px.
+ *   - vertically: line spans from `50% + 6px` (dot bottom) to
+ *     `-50% + 6px` (next dot top), assuming siblings have equal height.
  */
 export function StageTrack({
   stages,
@@ -58,43 +66,48 @@ export function StageTrack({
               : 'var(--border)';
         return (
           <li key={s.key} className="relative">
-            {!isLast && (
-              <span
-                className="absolute bottom-[-4px] top-6 w-px"
-                style={{
-                  left: '15px',
-                  background: lineColor,
-                  opacity:
-                    st === 'done' || st === 'auto' || st === 'failed' ? 1 : 0.9,
-                }}
-              />
-            )}
             <button
               type="button"
               onClick={() => onSelect?.(s.key)}
               className={cn(
-                'mb-0.5 flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-sm)] border-none px-2.5 py-1.75 text-left transition-colors',
+                'flex w-full cursor-pointer items-center gap-3 rounded-sm border-none px-2 py-1.5 text-left transition-colors',
                 selected ? 'bg-surface-2' : 'bg-transparent hover:bg-surface-2'
               )}
             >
-              <StageDot status={st} />
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <span
-                  className={cn(
-                    'flex-1 truncate text-[13px]',
-                    selected ? 'font-semibold' : 'font-medium',
-                    st === 'pending'
-                      ? 'text-foreground-subtle'
-                      : 'text-foreground'
-                  )}
-                >
-                  {s.label}
-                </span>
-                <span className="font-mono text-[10.5px] text-foreground-subtle">
-                  {timings[s.key] ?? ''}
-                </span>
-              </div>
+              <span className="relative z-10 flex shrink-0 items-center justify-center">
+                <StageDot status={st} />
+              </span>
+              <span
+                className={cn(
+                  'flex-1 truncate text-[13px]',
+                  selected ? 'font-semibold' : 'font-medium',
+                  st === 'pending'
+                    ? 'text-foreground-subtle'
+                    : 'text-foreground'
+                )}
+              >
+                {s.label}
+              </span>
+              <span className="font-mono text-[10.5px] text-foreground-subtle">
+                {timings[s.key] ?? ''}
+              </span>
             </button>
+            {!isLast && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute w-px"
+                style={{
+                  left: '13.5px',
+                  top: 'calc(50% + 6px)',
+                  bottom: 'calc(6px - 50%)',
+                  background: lineColor,
+                  opacity:
+                    st === 'done' || st === 'auto' || st === 'failed'
+                      ? 1
+                      : 0.85,
+                }}
+              />
+            )}
           </li>
         );
       })}
@@ -103,8 +116,7 @@ export function StageTrack({
 }
 
 function StageDot({ status }: { status: StageStatus }) {
-  const base =
-    'ml-1 mr-0.75 flex h-3 w-3 shrink-0 items-center justify-center rounded-full';
+  const base = 'flex h-3 w-3 shrink-0 items-center justify-center rounded-full';
   if (status === 'done' || status === 'auto')
     return (
       <div className={cn(base, 'bg-foreground')}>

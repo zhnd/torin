@@ -19,7 +19,7 @@ export function RegisterForm() {
 
   return (
     <div>
-      <h2 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">
+      <h2 className="m-0 text-[22px] font-semibold tracking-normal">
         Create an account
       </h2>
       <p className="m-0 mt-1.5 mb-7 text-[13px] text-foreground-muted">

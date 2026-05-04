@@ -35,7 +35,7 @@ export function MetricCard({
       <div className="mt-2 flex items-baseline gap-2">
         <span
           className={cn(
-            'font-bold leading-none tabular-nums tracking-[-0.025em] text-foreground',
+            'font-bold leading-none tabular-nums tracking-normal text-foreground',
             emphasis ? 'text-[30px]' : 'text-[26px]'
           )}
         >

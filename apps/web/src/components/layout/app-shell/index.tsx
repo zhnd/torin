@@ -11,27 +11,25 @@ interface AppShellProps {
 }
 
 /**
- * App shell: sidebar + main. No top header bar — pages render their own
- * page-level header inside the main region. Theme toggle lives in the
- * sidebar's footer next to the user row.
+ * Linear-style unified shell: a single outer card surrounds the whole
+ * UI. The sidebar lives inside as a left column separated from the
+ * main region by a single hairline — no double borders, no gap.
  */
 export function AppShell({ children, scroll = true }: AppShellProps) {
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <LeftSidebar />
-      <div className="flex min-h-0 flex-1 flex-col lg:pl-56">
+    <div className="h-screen overflow-hidden bg-background p-2.5">
+      <div className="flex h-full overflow-hidden rounded-md border border-border bg-card shadow-card">
+        <LeftSidebar />
         <main
           className={
             scroll
-              ? 'min-h-0 flex-1 overflow-auto'
-              : 'flex min-h-0 flex-1 flex-col overflow-hidden'
+              ? 'min-h-0 flex-1 overflow-auto pb-14 lg:pb-0'
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden pb-14 lg:pb-0'
           }
         >
           {children}
         </main>
       </div>
-      {/* Bottom nav spacer for mobile */}
-      <div className="h-16 shrink-0 lg:hidden" />
     </div>
   );
 }

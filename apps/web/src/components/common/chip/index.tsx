@@ -27,7 +27,7 @@ export function Chip({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] leading-[1.5]',
+        'inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] leading-normal',
         strong
           ? 'font-semibold text-foreground'
           : 'font-medium text-foreground-muted',

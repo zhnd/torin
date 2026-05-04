@@ -95,7 +95,8 @@ function StageCard({
         <StatusDot status={stage.status} />
         <span className="text-[13px] font-semibold">{stage.stageName}</span>
         <span className="font-mono text-[11px] text-foreground-subtle">
-          attempt{stage.attempts.length !== 1 ? 's' : ''} ×{stage.attempts.length}
+          attempt{stage.attempts.length !== 1 ? 's' : ''} ×
+          {stage.attempts.length}
         </span>
         <span className="font-mono text-[11px] text-foreground-subtle">
           {invocCount} invocation{invocCount !== 1 ? 's' : ''}
@@ -229,7 +230,8 @@ function InvocationRow({
                         {turn.textTruncatedAt != null && (
                           <span className="text-foreground-subtle">
                             {' '}
-                            … [truncated from {formatBytes(turn.textTruncatedAt)}]
+                            … [truncated from{' '}
+                            {formatBytes(turn.textTruncatedAt)}]
                           </span>
                         )}
                       </div>
@@ -305,6 +307,7 @@ function ToolCallModal({
       aria-modal="true"
       tabIndex={-1}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: propagation-trap wrapper — stops backdrop close when interacting with modal content; not itself interactive */}
       <div
         className="flex max-h-[85vh] w-full max-w-[900px] flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}

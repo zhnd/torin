@@ -79,6 +79,84 @@ export function buildActivityRows(tasks: DashboardTask[]): ActivityRow[] {
     }));
 }
 
+/** Distribution of tasks across the canonical stage pipeline. */
+export interface StageDistributionRow {
+  key: string;
+  label: string;
+  count: number;
+  percent: number;
+}
+
+const STAGE_LABELS: Record<string, string> = {
+  ANALYSIS: 'Analyze',
+  REPRODUCE: 'Reproduce',
+  IMPLEMENT: 'Implement',
+  FILTER: 'Filter',
+  CRITIC: 'Critic',
+  PR: 'PR',
+};
+const STAGE_ORDER = [
+  'ANALYSIS',
+  'REPRODUCE',
+  'IMPLEMENT',
+  'FILTER',
+  'CRITIC',
+  'PR',
+];
+
+/** Group active tasks by their currentStageKey for the stage panel. */
+export function buildStageDistribution(
+  tasks: DashboardTask[]
+): StageDistributionRow[] {
+  const active = tasks.filter(
+    (t) => t.status === 'RUNNING' || t.status === 'PENDING'
+  );
+  const counts = new Map<string, number>();
+  for (const t of active) {
+    const k = (t.currentStageKey ?? 'ANALYSIS').toUpperCase();
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const total = active.length || 1;
+  return STAGE_ORDER.map((key) => ({
+    key,
+    label: STAGE_LABELS[key] ?? key,
+    count: counts.get(key) ?? 0,
+    percent: Math.round(((counts.get(key) ?? 0) / total) * 100),
+  }));
+}
+
+/** Project-level activity rollup for the project-mix panel. */
+export interface ProjectActivityRow {
+  id: string;
+  name: string;
+  total: number;
+  active: number;
+  awaiting: number;
+}
+
+export function buildProjectActivity(
+  tasks: DashboardTask[]
+): ProjectActivityRow[] {
+  const map = new Map<string, ProjectActivityRow>();
+  for (const t of tasks) {
+    if (!t.project) continue;
+    const existing = map.get(t.project.id) ?? {
+      id: t.project.id,
+      name: t.project.name,
+      total: 0,
+      active: 0,
+      awaiting: 0,
+    };
+    existing.total++;
+    if (t.status === 'RUNNING' || t.status === 'PENDING') existing.active++;
+    if (t.awaiting != null) existing.awaiting++;
+    map.set(t.project.id, existing);
+  }
+  return Array.from(map.values())
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+}
+
 /**
  * Aggregate dashboard summary numbers in one pass.
  * Pure: takes tasks + a `now` clock so callers can be deterministic.
@@ -117,8 +195,6 @@ export function summarize(tasks: DashboardTask[], now: number) {
     queuedCount,
     completedCount: completed.length,
     failedCount: failed.length,
-    // Cost rollup deferred to the agent_log work; tasks no longer carry
-    // cost aggregates on the row.
     weeklyCost: 0,
     recentTaskCount: recentTasks.length,
     recentOutcomeCount: recentOutcomes.length,

@@ -30,7 +30,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
       <div className="flex items-center gap-3">
         <ProjectAvatar name={project.name} size={32} />
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-semibold leading-[1.2] tracking-[-0.015em]">
+          <div className="text-[15px] font-semibold leading-[1.2] tracking-normal">
             {project.name}
           </div>
           <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-foreground-subtle">
@@ -105,7 +105,7 @@ function CardStat({
         {label}
       </div>
       <div
-        className="mt-0.5 text-[18px] font-semibold leading-none tabular-nums tracking-[-0.015em]"
+        className="mt-0.5 text-[18px] font-semibold leading-none tabular-nums tracking-normal"
         style={{
           color: emphasize ? 'var(--accent)' : undefined,
           fontFamily: mono ? 'var(--font-mono)' : undefined,
@@ -116,4 +116,3 @@ function CardStat({
     </div>
   );
 }
-

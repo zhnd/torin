@@ -35,7 +35,8 @@ export function summarizeInput(input: unknown): string {
 
 export function summarizeOutput(tc: ToolCallView): string {
   if (tc.errorText) return tc.errorText.slice(0, 160);
-  if (tc.output) return tc.output.split('\n').slice(0, 1)[0]?.slice(0, 160) ?? '';
+  if (tc.output)
+    return tc.output.split('\n').slice(0, 1)[0]?.slice(0, 160) ?? '';
   return '';
 }
 

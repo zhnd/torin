@@ -28,9 +28,7 @@ export function useWorkflowDefinition(
   kind: string
 ): WorkflowDefinitionMeta | null {
   const { workflowDefinitions } = useMetadata();
-  return (
-    workflowDefinitions.find((w) => w.kind === kind) ?? null
-  );
+  return workflowDefinitions.find((w) => w.kind === kind) ?? null;
 }
 
 export function useStageMetadata(kind: string): {

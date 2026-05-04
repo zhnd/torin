@@ -1,4 +1,8 @@
-import type { AgentInvocationView, ExecutionView, ToolCallView } from '@/modules/tasks/types';
+import type {
+  AgentInvocationView,
+  ExecutionView,
+  ToolCallView,
+} from '@/modules/tasks/types';
 
 export interface TraceViewProps {
   execution: ExecutionView | null;

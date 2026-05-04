@@ -94,7 +94,10 @@ export function RetrospectiveView({ retrospective }: RetrospectiveViewProps) {
             </div>
           ) : (
             durations.map((d) => (
-              <div key={d.stageName} className="mb-2 flex items-center gap-3 last:mb-0">
+              <div
+                key={d.stageName}
+                className="mb-2 flex items-center gap-3 last:mb-0"
+              >
                 <span className="w-28 font-mono text-[12px] font-medium">
                   {d.stageName}
                 </span>
@@ -126,6 +129,7 @@ export function RetrospectiveView({ retrospective }: RetrospectiveViewProps) {
           <div className="rounded-md border border-border bg-surface">
             {retrospective.bottlenecks.map((b, i) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: bottlenecks list is positionally stable per retrospective
                 key={`${b.stageName}-${i}`}
                 className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0"
               >
@@ -154,6 +158,7 @@ export function RetrospectiveView({ retrospective }: RetrospectiveViewProps) {
           <div className="rounded-md border border-border bg-surface">
             {retrospective.recommendations.map((r, i) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: recommendations are positional within a single retrospective
                 key={`${r.kind}-${i}`}
                 className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0"
               >
@@ -177,6 +182,7 @@ export function RetrospectiveView({ retrospective }: RetrospectiveViewProps) {
           <div className="rounded-md border border-border bg-surface">
             {retrospective.riskFactors.map((r, i) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: risk factors are positional within a single retrospective
                 key={`${r.severity}-${i}`}
                 className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0"
               >
@@ -211,7 +217,7 @@ function StatBlock({
       <div className="text-[10.5px] font-semibold uppercase tracking-[0.04em] text-foreground-subtle">
         {label}
       </div>
-      <div className="mt-1.5 font-semibold leading-none tabular-nums tracking-[-0.015em] text-foreground text-[22px]">
+      <div className="mt-1.5 font-semibold leading-none tabular-nums tracking-normal text-foreground text-[22px]">
         {value}
       </div>
       {hint && (
