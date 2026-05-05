@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useSubscription } from '@apollo/client';
+import { useMutation, useQuery, useSubscription } from '@apollo/client/react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -10,7 +10,7 @@ import {
   REVIEW_TASK,
   TASK_UPDATED,
 } from '@/modules/tasks/graphql';
-import { transformTaskToDetail } from '@/modules/tasks/transform';
+import { type ApiTask, transformTaskToDetail } from '@/modules/tasks/transform';
 import { computeHitlWaited, computeStageTimings } from './libs';
 import type {
   AttemptView,
@@ -42,8 +42,17 @@ interface UseServiceInput {
  * own HITL review (if any). We fold to `StageDataMap` keyed by web's
  * StageKey so each body looks up its stage's data O(1).
  */
+interface TaskDetailQueryShape {
+  task:
+    | (ApiTask & {
+        currentStageKey?: string | null;
+        stages?: ServerStageView[];
+      })
+    | null;
+}
+
 export function useService({ taskId }: UseServiceInput) {
-  const { data, loading, refetch } = useQuery(GET_TASK, {
+  const { data, loading, refetch } = useQuery<TaskDetailQueryShape>(GET_TASK, {
     variables: { id: taskId },
   });
 
@@ -103,7 +112,9 @@ export function useService({ taskId }: UseServiceInput) {
 
   const [reviewTask, { loading: reviewing }] = useMutation(REVIEW_TASK);
   const router = useRouter();
-  const [retryTask, { loading: retrying }] = useMutation(RETRY_TASK);
+  const [retryTask, { loading: retrying }] = useMutation<{
+    retryTask?: { id: string } | null;
+  }>(RETRY_TASK);
 
   const submitReview = useCallback(
     async (lane: string, feedback: string) => {

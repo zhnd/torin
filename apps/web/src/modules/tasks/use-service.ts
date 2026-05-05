@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
 import { TASKS_POLL_INTERVAL_MS } from './constants';
 import { GET_TASKS } from './graphql';
@@ -13,7 +13,7 @@ import type { TaskListRow, TaskListStatusFilter } from './types';
  * `openTask` callback.
  */
 export function useService() {
-  const { data, loading } = useQuery(GET_TASKS, {
+  const { data, loading } = useQuery<{ tasks: TaskListRow[] }>(GET_TASKS, {
     pollInterval: TASKS_POLL_INTERVAL_MS,
   });
   const [status, setStatus] = useState<TaskListStatusFilter>(() => {

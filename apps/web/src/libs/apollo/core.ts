@@ -1,5 +1,11 @@
-import { ApolloClient, HttpLink, InMemoryCache, split } from '@apollo/client';
-import { onError } from '@apollo/client/link/error';
+import {
+  ApolloClient,
+  ApolloLink,
+  HttpLink,
+  InMemoryCache,
+} from '@apollo/client';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+import { ErrorLink } from '@apollo/client/link/error';
 import { GraphQLWsLink } from '@apollo/client/link/subscriptions';
 import { getMainDefinition } from '@apollo/client/utilities';
 import { createClient } from 'graphql-ws';
@@ -24,29 +30,30 @@ function showErrorToast(message: string): void {
 }
 
 export function makeClient() {
-  const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
-    if (graphQLErrors) {
-      for (const err of graphQLErrors) {
+  // Apollo v4: ErrorLink callback receives a single `error` (typed as
+  // `unknown`) plus `operation`. Use `CombinedGraphQLErrors.is(error)`
+  // to discriminate the GraphQL-error case; everything else is treated
+  // as a transport / unexpected error.
+  const errorLink = new ErrorLink(({ error, operation }) => {
+    if (CombinedGraphQLErrors.is(error)) {
+      for (const err of error.errors) {
         const code = (err.extensions?.code ?? '') as string;
         // The web layer already redirects to /login on 401 via auth-client;
         // surfacing a toast there would be noisy and redundant.
         if (code === 'UNAUTHORIZED') continue;
         showErrorToast(err.message || 'Request failed');
       }
+      return;
     }
-    if (networkError) {
-      const msg =
-        'message' in networkError && networkError.message
-          ? networkError.message
-          : 'Network error — check your connection';
-      showErrorToast(msg);
-      // Always log network failures with operation context — silent
-      // failures are how broken pages become invisible bugs.
-      console.warn(
-        `Apollo network error on ${operation.operationName}:`,
-        networkError
-      );
-    }
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Network error — check your connection';
+    showErrorToast(message);
+    // Always log network failures with operation context — silent
+    // failures are how broken pages become invisible bugs.
+    console.warn(`Apollo network error on ${operation.operationName}:`, error);
   });
 
   const httpLink = new HttpLink({
@@ -59,7 +66,7 @@ export function makeClient() {
   const transport =
     typeof window === 'undefined'
       ? httpLink
-      : split(
+      : ApolloLink.split(
           ({ query }) => {
             const def = getMainDefinition(query);
             return (

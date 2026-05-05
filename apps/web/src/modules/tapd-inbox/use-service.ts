@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from '@apollo/client';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { SET_TAPD_WORKSPACE_PROJECT_MAP, TAPD_INBOX_QUERY } from './graphql';

@@ -1,4 +1,4 @@
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@apollo/client/react';
 import { useMemo } from 'react';
 import { GET_METADATA } from './graphql';
 import type {
@@ -14,7 +14,7 @@ interface MetadataShape {
 }
 
 export function useMetadata(): MetadataShape {
-  const { data } = useQuery(GET_METADATA, {
+  const { data } = useQuery<MetadataShape>(GET_METADATA, {
     fetchPolicy: 'cache-first',
   });
   return {

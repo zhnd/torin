@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@apollo/client/react';
 import { useMemo } from 'react';
 import { INBOX_QUERY } from './graphql';
 import { buildAwaitingItems, buildDecisions, summarizeInbox } from './libs';
@@ -13,7 +13,7 @@ const INBOX_POLL_INTERVAL_MS = 5000;
  * the recent-decisions feed, and the three inbox summary numbers.
  */
 export function useService() {
-  const { data, loading } = useQuery(INBOX_QUERY, {
+  const { data, loading } = useQuery<{ tasks: InboxTask[] }>(INBOX_QUERY, {
     pollInterval: INBOX_POLL_INTERVAL_MS,
   });
 

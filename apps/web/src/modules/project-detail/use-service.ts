@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@apollo/client';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -17,7 +17,9 @@ interface UseServiceInput {
 
 export function useService({ projectId }: UseServiceInput) {
   const router = useRouter();
-  const { data, loading, error } = useQuery(GET_PROJECT, {
+  const { data, loading, error } = useQuery<{
+    project: ProjectDetailData | null;
+  }>(GET_PROJECT, {
     variables: { id: projectId },
   });
   const project: ProjectDetailData | null = data?.project ?? null;
@@ -26,9 +28,12 @@ export function useService({ projectId }: UseServiceInput) {
   const [resolveDefectOpen, setResolveDefectOpen] = useState(false);
   const [defectDescription, setDefectDescription] = useState('');
 
-  const [resolveDefect, { loading: resolving }] = useMutation(RESOLVE_DEFECT);
-  const [analyzeRepository, { loading: analyzing }] =
-    useMutation(ANALYZE_REPOSITORY);
+  const [resolveDefect, { loading: resolving }] = useMutation<{
+    resolveDefect?: { id: string } | null;
+  }>(RESOLVE_DEFECT);
+  const [analyzeRepository, { loading: analyzing }] = useMutation<{
+    analyzeRepository?: { id: string } | null;
+  }>(ANALYZE_REPOSITORY);
   const [deleteProject, { loading: deleting }] = useMutation(DELETE_PROJECT);
 
   const recentTasks = useMemo(

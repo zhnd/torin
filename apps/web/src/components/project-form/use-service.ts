@@ -1,5 +1,5 @@
-import { useMutation } from '@apollo/client';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation } from '@apollo/client/react';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -22,7 +22,7 @@ export function useService({
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<ProjectFormValues>({
-    resolver: zodResolver(projectSchema),
+    resolver: standardSchemaResolver(projectSchema),
     defaultValues: {
       name: defaultValues?.name ?? '',
       repositoryUrl: defaultValues?.repositoryUrl ?? '',
@@ -33,7 +33,9 @@ export function useService({
     },
   });
 
-  const [createProject, { loading: creating }] = useMutation(CREATE_PROJECT);
+  const [createProject, { loading: creating }] = useMutation<{
+    createProject?: { id: string } | null;
+  }>(CREATE_PROJECT);
   const [updateProject, { loading: updating }] = useMutation(UPDATE_PROJECT);
   const isLoading = creating || updating;
 

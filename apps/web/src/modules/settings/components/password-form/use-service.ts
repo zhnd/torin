@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -10,7 +10,7 @@ export function useService() {
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<PasswordFormValues>({
-    resolver: zodResolver(passwordSchema),
+    resolver: standardSchemaResolver(passwordSchema),
     defaultValues: {
       currentPassword: '',
       newPassword: '',

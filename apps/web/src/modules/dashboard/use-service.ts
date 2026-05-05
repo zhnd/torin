@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@apollo/client/react';
 import { useMemo } from 'react';
 import { DASHBOARD_QUERY } from './graphql';
 import {
@@ -22,7 +22,10 @@ export function useService() {
   // 5s polling matches the "live · auto-refresh" hero copy. Cheap at
   // current scale (per-user task counts are small); revisit if the
   // dashboard ever loads thousands of rows.
-  const { data, loading } = useQuery(DASHBOARD_QUERY, {
+  const { data, loading } = useQuery<{
+    projects: DashboardProject[];
+    tasks: DashboardTask[];
+  }>(DASHBOARD_QUERY, {
     pollInterval: 5_000,
   });
 

@@ -138,7 +138,7 @@ interface ApiExecution {
   retrospective: ApiRetrospective | null;
 }
 
-interface ApiTask {
+export interface ApiTask {
   id: string;
   type: string;
   status: string;

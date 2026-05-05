@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from '@apollo/client';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -55,7 +55,9 @@ export function useService({ bug, mapping, onClose }: Args) {
     );
   }, [bug, branches]);
 
-  const [resolveDefect, { loading: submitting }] = useMutation(RESOLVE_DEFECT);
+  const [resolveDefect, { loading: submitting }] = useMutation<{
+    resolveDefect?: { id: string } | null;
+  }>(RESOLVE_DEFECT);
 
   async function submit() {
     if (!bug) return;
