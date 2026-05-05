@@ -1,15 +1,19 @@
 import type { EventLevel, StageStatus, TaskStage } from '@torin/domain';
 import type {
+  ActivityLevel,
+  ActivityLogEntry,
   AgentInvocationView,
   AttemptView,
   CostBreakdown,
   DiffFile,
+  EventInvocationsView,
   ExecutionView,
   HealthAlert,
   RetrospectiveView,
   ReviewView,
   SampleView,
   StageDetail,
+  StageTimingView,
   StageView,
   TaskDetail,
   TaskItem,
@@ -34,6 +38,7 @@ interface ApiEvent {
   startedAt: string;
   endedAt?: string | null;
   durationMs?: number | null;
+  agentInvocations?: ApiInvocation[];
 }
 
 interface ApiToolCall {
@@ -144,6 +149,8 @@ interface ApiTask {
   project?: { id: string; name: string; repositoryUrl?: string } | null;
   createdAt: string;
   updatedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
 }
 
 // ── Status mapping ──────────────────────────────────────────
@@ -183,6 +190,7 @@ const KNOWN_STAGES: TaskStage[] = [
 // ── Transform ──────────────────────────────────────────────
 
 export function transformTaskToItem(apiTask: ApiTask): TaskItem {
+  const totals = computeAgentTotals(apiTask.events ?? []);
   return {
     id: apiTask.id,
     title: apiTask.type.replace(/_/g, ' '),
@@ -190,12 +198,16 @@ export function transformTaskToItem(apiTask: ApiTask): TaskItem {
     repo: apiTask.project?.repositoryUrl ?? '',
     branch: '',
     workflow: apiTask.type,
-    model: '',
+    model: totals.model ?? '',
     currentStage: 'analysis' as TaskStage,
     stages: {} as Partial<Record<TaskStage, StageStatus>>,
     stageDetails: {} as Partial<Record<TaskStage, StageDetail>>,
-    duration: '—',
-    cost: '$0',
+    duration: formatTaskDuration(
+      apiTask.startedAt ?? null,
+      apiTask.completedAt ?? null,
+      apiTask.status
+    ),
+    cost: formatCostUsd(totals.totalCostUsd),
     sandbox: '',
     badges: [],
     createdAt: apiTask.createdAt,
@@ -211,6 +223,42 @@ export function transformTaskToDetail(apiTask: ApiTask): TaskDetail {
   const currentExecution = executions[0] ?? null;
 
   const timeline: TimelineEvent[] = events.map(mapEvent);
+
+  // Phase 1 trace view: pair each STAGE-kind event with its agent
+  // invocations. Drop events with zero invocations (REVIEW-kind, FILTER,
+  // PR, anything else with no agent run) so TraceView only shows useful
+  // rows.
+  const eventInvocations: EventInvocationsView[] = events
+    .filter((e) => e.kind === 'STAGE' && (e.agentInvocations ?? []).length > 0)
+    .map((e) => ({
+      eventId: e.id,
+      stageKey: e.stageKey,
+      attemptNumber: e.attemptNumber,
+      status: e.status,
+      startedAt: e.startedAt,
+      endedAt: e.endedAt ?? null,
+      durationMs: e.durationMs ?? null,
+      invocations: (e.agentInvocations ?? []).map(mapInvocation),
+    }));
+
+  // Visual tab Gantt + breakdown source: every STAGE-kind TaskEvent
+  // becomes one timing entry. Includes stages without agents (FILTER,
+  // PR) since they still take wall time worth visualizing.
+  const stageTimings: StageTimingView[] = events
+    .filter((e) => e.kind === 'STAGE')
+    .map((e) => ({
+      eventId: e.id,
+      stageKey: e.stageKey,
+      attemptNumber: e.attemptNumber,
+      status: e.status,
+      startedAt: e.startedAt,
+      endedAt: e.endedAt ?? null,
+      durationMs: e.durationMs ?? null,
+    }));
+
+  // Activity log: stage transitions + agent invocations + tool calls
+  // merged into one chronological feed.
+  const activityLog = buildActivityLog(events);
 
   // Cost rollup is deferred to the agent_log work — empty for now.
   const cost: CostBreakdown[] = [];
@@ -258,6 +306,8 @@ export function transformTaskToDetail(apiTask: ApiTask): TaskDetail {
       0
     ) ?? 0;
 
+  const totals = computeAgentTotals(events);
+
   return {
     task,
     timeline,
@@ -284,15 +334,222 @@ export function transformTaskToDetail(apiTask: ApiTask): TaskDetail {
       pathDeviation: false,
       errorCount: failedStages.length,
       retryCount,
-      totalTokens: 0,
-      totalCost: '$0',
+      totalTokens: totals.totalInputTokens + totals.totalOutputTokens,
+      totalCost: formatCostUsd(totals.totalCostUsd),
     },
     approvals: [],
     currentExecution,
     executions,
     samples,
     reviews,
+    eventInvocations,
+    stageTimings,
+    activityLog,
   };
+}
+
+// ── Activity log derivation ─────────────────────────────────
+
+/**
+ * Flatten three event sources into a single chronological feed:
+ *   - STAGE transitions (open / terminal) from TaskEvent
+ *   - REVIEW events from TaskEvent
+ *   - agent invocation start / end
+ *   - per-tool calls
+ *
+ * Each entry carries enough metadata for the row to render without
+ * additional lookups; sort is stable by timestamp ascending.
+ */
+function buildActivityLog(events: ApiEvent[]): ActivityLogEntry[] {
+  const out: ActivityLogEntry[] = [];
+
+  for (const e of events) {
+    const stage = e.stageKey.toLowerCase();
+    const stageDisplay = e.stageKey;
+
+    if (e.kind === 'STAGE') {
+      out.push({
+        id: `stage-open-${e.id}`,
+        timestamp: e.startedAt,
+        category: 'stage',
+        stage,
+        title: `${stageDisplay} attempt ${e.attemptNumber} opened`,
+        level: 'info',
+      });
+      if (e.endedAt) {
+        out.push({
+          id: `stage-end-${e.id}`,
+          timestamp: e.endedAt,
+          category: 'stage',
+          stage,
+          title: `${stageDisplay} attempt ${e.attemptNumber} ${e.status.toLowerCase()}`,
+          detail:
+            typeof e.durationMs === 'number'
+              ? formatActivityDuration(e.durationMs)
+              : undefined,
+          level: stageStatusLevel(e.status),
+        });
+      }
+    } else if (e.kind === 'REVIEW' && e.endedAt) {
+      out.push({
+        id: `review-${e.id}`,
+        timestamp: e.endedAt,
+        category: 'stage',
+        stage,
+        title: `Review submitted on ${stageDisplay}`,
+        level: e.status === 'COMPLETED' ? 'info' : 'warn',
+      });
+    }
+
+    for (const inv of e.agentInvocations ?? []) {
+      out.push({
+        id: `agent-start-${inv.id}`,
+        timestamp: inv.startedAt,
+        category: 'agent',
+        stage,
+        title: `${inv.agentName} started`,
+        detail: inv.model,
+        level: 'info',
+        name: inv.agentName,
+      });
+      if (inv.endedAt) {
+        const turnCount = inv.turns.length;
+        const cost =
+          typeof inv.totalCostUsd === 'number'
+            ? `$${inv.totalCostUsd.toFixed(4)}`
+            : null;
+        const duration =
+          typeof inv.durationMs === 'number'
+            ? formatActivityDuration(inv.durationMs)
+            : null;
+        const detail = [
+          turnCount > 0
+            ? `${turnCount} turn${turnCount === 1 ? '' : 's'}`
+            : null,
+          cost,
+          duration,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        out.push({
+          id: `agent-end-${inv.id}`,
+          timestamp: inv.endedAt,
+          category: 'agent',
+          stage,
+          title: `${inv.agentName} ${inv.status.toLowerCase()}`,
+          detail: detail || undefined,
+          level: inv.status === 'ERROR' ? 'error' : 'info',
+          name: inv.agentName,
+          durationMs: inv.durationMs ?? null,
+          costUsd: inv.totalCostUsd ?? null,
+        });
+      }
+
+      for (const tc of inv.toolCalls) {
+        out.push({
+          id: `tool-${tc.id}`,
+          timestamp: tc.startedAt,
+          category: 'tool',
+          stage,
+          title: tc.name,
+          detail:
+            typeof tc.durationMs === 'number'
+              ? formatActivityDuration(tc.durationMs)
+              : undefined,
+          level: tc.success === false ? 'error' : 'info',
+          name: tc.name,
+          durationMs: tc.durationMs ?? null,
+          success: tc.success,
+        });
+      }
+    }
+  }
+
+  out.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  return out;
+}
+
+function stageStatusLevel(status: string): ActivityLevel {
+  switch (status) {
+    case 'FAILED':
+      return 'error';
+    case 'REJECTED':
+    case 'AWAITING':
+      return 'warn';
+    default:
+      return 'info';
+  }
+}
+
+// ── Header stat helpers ─────────────────────────────────────
+
+interface AgentTotals {
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  /** First non-empty model string seen — used as the "current model"
+   *  shown next to the project name in the hero. */
+  model: string | null;
+}
+
+function computeAgentTotals(events: ApiEvent[]): AgentTotals {
+  let totalCostUsd = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let model: string | null = null;
+  for (const e of events) {
+    for (const inv of e.agentInvocations ?? []) {
+      totalCostUsd += inv.totalCostUsd ?? 0;
+      totalInputTokens += inv.inputTokens ?? 0;
+      totalOutputTokens += inv.outputTokens ?? 0;
+      if (model == null && inv.model && inv.model !== 'unknown') {
+        model = inv.model;
+      }
+    }
+  }
+  return { totalCostUsd, totalInputTokens, totalOutputTokens, model };
+}
+
+/**
+ * Walltime for the task header. Pending → em dash; running → live
+ * elapsed since startedAt; terminal → startedAt → completedAt.
+ */
+function formatTaskDuration(
+  startedAt: string | null,
+  completedAt: string | null,
+  status: string
+): string {
+  if (!startedAt) return '—';
+  const start = new Date(startedAt).getTime();
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+  const ms = Math.max(0, end - start);
+  const formatted = formatActivityDuration(ms);
+  // Trailing dot suffix communicates "still ticking" without forcing
+  // continuous re-render.
+  return status === 'RUNNING' ? `${formatted}+` : formatted;
+}
+
+/** Smart-precision USD formatter. Sub-cent amounts keep 4 decimals so
+ *  small agent runs don't all round to "$0.00". */
+function formatCostUsd(usd: number): string {
+  if (usd <= 0) return '$0';
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  if (usd < 1) return `$${usd.toFixed(3)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+function formatActivityDuration(ms: number): string {
+  const total = Math.round(ms);
+  if (total < 1000) return `${total}ms`;
+  const totalSeconds = Math.round(total / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
 // ── Sub-mappers ──────────────────────────────────────────────

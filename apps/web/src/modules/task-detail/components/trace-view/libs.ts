@@ -2,12 +2,17 @@ import type { ToolCallView } from '@/modules/tasks/types';
 
 export function formatDurationMs(ms: number | null): string {
   if (ms == null) return '—';
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  const m = Math.floor(s / 60);
-  const rem = Math.round(s % 60);
-  return `${m}m ${rem}s`;
+  const total = Math.round(ms);
+  if (total < 1000) return `${total}ms`;
+  const totalSeconds = Math.round(total / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
 export function formatBytes(n: number): string {

@@ -64,6 +64,46 @@ export const TASK_DETAIL_FIELDS = gql`
       startedAt
       endedAt
       durationMs
+      agentInvocations {
+        id
+        agentName
+        model
+        status
+        errorText
+        spanId
+        startedAt
+        endedAt
+        durationMs
+        totalCostUsd
+        inputTokens
+        outputTokens
+        turns {
+          id
+          turnIndex
+          role
+          textContent
+          textTruncatedAt
+          toolUseCount
+          inputTokens
+          outputTokens
+          startedAt
+        }
+        toolCalls {
+          id
+          agentTurnId
+          toolUseId
+          name
+          input
+          output
+          outputTruncatedAt
+          success
+          errorText
+          spanId
+          startedAt
+          endedAt
+          durationMs
+        }
+      }
     }
     executions {
       id

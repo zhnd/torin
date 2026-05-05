@@ -325,4 +325,66 @@ export interface TaskDetail {
   executions: ExecutionView[];
   samples: SampleView[];
   reviews: ReviewView[];
+
+  // Phase 1 agent observability: per-stage-event agent invocation view
+  // for the TraceView tab. Each entry pairs one TaskEvent with the agent
+  // invocations recorded under it. Empty for tasks before this phase.
+  eventInvocations: EventInvocationsView[];
+
+  // Per-stage attempt timings used by VisualView (Gantt + breakdown).
+  // Sourced from STAGE-kind TaskEvents directly, so it tracks any stage
+  // that ran — including those without agent invocations (FILTER, PR).
+  stageTimings: StageTimingView[];
+
+  // Unified activity log for the Events tab. Merges three event sources
+  // sorted by timestamp: stage transitions, agent invocations, tool
+  // calls. Empty before any task progress.
+  activityLog: ActivityLogEntry[];
+}
+
+export type ActivityCategory = 'stage' | 'agent' | 'tool';
+export type ActivityLevel = 'info' | 'warn' | 'error';
+
+export interface ActivityLogEntry {
+  id: string;
+  timestamp: string;
+  category: ActivityCategory;
+  /** Lowercase stage key for tag display (analyze / implement / ...). */
+  stage: string;
+  /** Primary line of text (e.g. "implementResolution started"). */
+  title: string;
+  /** Optional secondary text (model name, duration, cost summary). */
+  detail?: string;
+  level: ActivityLevel;
+  /** When category = 'tool' / 'agent', the name of the tool / agent. */
+  name?: string;
+  durationMs?: number | null;
+  costUsd?: number | null;
+  /** Tool-specific outcome flag for the trailing dot. */
+  success?: boolean | null;
+}
+
+export interface EventInvocationsView {
+  /** TaskEvent.id */
+  eventId: string;
+  /** Stage key (uppercase, e.g. ANALYSIS / IMPLEMENT). */
+  stageKey: string;
+  attemptNumber: number;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  invocations: AgentInvocationView[];
+}
+
+export interface StageTimingView {
+  /** TaskEvent.id */
+  eventId: string;
+  /** Stage key (uppercase from DB: ANALYSIS / REPRODUCE / IMPLEMENT / FILTER / CRITIC / PR). */
+  stageKey: string;
+  attemptNumber: number;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
 }

@@ -70,20 +70,3 @@ export function formatTokens(n: number): string {
   if (n < 1000) return `${n}`;
   return `${(n / 1000).toFixed(1)}k`;
 }
-
-/**
- * Synthesize unified-diff headers around raw patch bodies so
- * `<DiffView>` can parse multi-file diffs from a `result.diff` array
- * shape (each entry already carries its file path separately).
- */
-export function combineDiffPatches(
-  diff: Array<{ file: string; patch: string }>
-): string {
-  return diff
-    .map((d) => {
-      const hasHeader = /^---\s/m.test(d.patch);
-      if (hasHeader) return d.patch;
-      return `--- a/${d.file}\n+++ b/${d.file}\n${d.patch}`;
-    })
-    .join('\n');
-}

@@ -1,11 +1,11 @@
 import type {
   AgentInvocationView,
-  ExecutionView,
+  EventInvocationsView,
   ToolCallView,
 } from '@/modules/tasks/types';
 
 export interface TraceViewProps {
-  execution: ExecutionView | null;
+  events: EventInvocationsView[];
 }
 
 export interface SelectedToolCall {

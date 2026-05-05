@@ -22,28 +22,29 @@ interface UseServiceInput {
  * Task detail data layer.
  *
  * Single query (`GET_TASK`) carries everything web renders. Subscription
- * pushes the same Task payload into Apollo's cache on every state change
- * — workflow is the only writer.
+ * fires `refetch()` on each tick — workflow is the only writer.
+ *
+ * Why refetch instead of `client.writeQuery` with the subscription
+ * payload: writing the full Task tree directly into the GET_TASK cache
+ * key is finicky around nested-entity normalization (events →
+ * agentInvocations → turns / toolCalls), and we observed UI staleness
+ * with that path. Refetch guarantees the cache reflects the database
+ * truth at the cost of one extra HTTP round-trip per state change,
+ * which is negligible at the tick rate the workflow produces.
  *
  * Server returns `stages: StageView[]` with each attempt embedding its
  * own HITL review (if any). We fold to `StageDataMap` keyed by web's
  * StageKey so each body looks up its stage's data O(1).
  */
 export function useService({ taskId }: UseServiceInput) {
-  const { data, loading, refetch, client } = useQuery(GET_TASK, {
+  const { data, loading, refetch } = useQuery(GET_TASK, {
     variables: { id: taskId },
   });
 
   useSubscription(TASK_UPDATED, {
     variables: { id: taskId },
-    onData: ({ data: sub }) => {
-      const incoming = sub?.data?.taskUpdated;
-      if (!incoming) return;
-      client.writeQuery({
-        query: GET_TASK,
-        variables: { id: taskId },
-        data: { task: incoming },
-      });
+    onData: () => {
+      refetch();
     },
   });
 

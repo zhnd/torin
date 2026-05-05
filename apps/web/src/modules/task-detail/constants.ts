@@ -25,5 +25,4 @@ export const DETAIL_TABS: [DetailTab, string][] = [
   ['visual', 'Visual'],
   ['events', 'Events'],
   ['trace', 'Trace'],
-  ['retrospective', 'Retrospective'],
 ];

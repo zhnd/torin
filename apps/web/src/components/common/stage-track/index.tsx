@@ -1,36 +1,9 @@
 import { cn } from '@/utils/cn';
+import { DEFAULT_STAGES } from './constants';
+import type { StageStatus, StageTrackProps } from './types';
 
-export type StageStatus =
-  | 'pending'
-  | 'running'
-  | 'awaiting'
-  | 'done'
-  | 'auto'
-  | 'failed'
-  | 'skipped';
-
-export interface StageItem {
-  key: string;
-  label: string;
-}
-
-export const DEFAULT_STAGES: StageItem[] = [
-  { key: 'analyze', label: 'Analyze' },
-  { key: 'reproduce', label: 'Reproduce' },
-  { key: 'implement', label: 'Implement' },
-  { key: 'filter', label: 'Filter' },
-  { key: 'critic', label: 'Critic' },
-  { key: 'hitl', label: 'HITL-final' },
-  { key: 'pr', label: 'Pull request' },
-];
-
-interface StageTrackProps {
-  stages: Partial<Record<string, StageStatus>>;
-  currentStage?: string;
-  onSelect?: (key: string) => void;
-  list?: StageItem[];
-  timings?: Partial<Record<string, string>>;
-}
+export { DEFAULT_STAGES } from './constants';
+export type { StageItem, StageStatus, StageTrackProps } from './types';
 
 /**
  * Vertical stage track. Each row is a dot + label + time. The connecting
