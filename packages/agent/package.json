@@ -24,7 +24,5 @@
     "dedent": "^1.7.2",
     "zod": "^4.3.6"
   },
-  "devDependencies": {
-    "typescript": "^5.8.0"
-  }
+  "devDependencies": {}
 }

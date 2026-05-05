@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@temporalio/worker": "^1.15.0",
+    "@temporalio/worker": "^1.17.0",
     "@torin/agent": "workspace:*",
     "@torin/domain": "workspace:*",
     "@torin/sandbox": "workspace:*",
@@ -17,7 +17,6 @@
     "@torin/workflow": "workspace:*"
   },
   "devDependencies": {
-    "tsx": "^4.21.0",
-    "typescript": "^5.8.0"
+    "tsx": "^4.21.0"
   }
 }
