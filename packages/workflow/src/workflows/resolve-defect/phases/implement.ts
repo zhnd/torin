@@ -111,13 +111,34 @@ export async function runImplement(
         preconditionViolations,
       });
 
-      const { result } = await sandboxAgent.implementResolutionActivity(
+      const implementOut = await sandboxAgent.implementResolutionActivity(
         ctx.sandboxState,
         input.defectDescription,
         analysis,
         oracle,
         sampleFeedback || undefined
       );
+      await main.persistAgentInvocationActivity({
+        taskEventId: implementEventId,
+        capturedTrace: implementOut.capturedTrace,
+        errorText: implementOut.errorText,
+      });
+      if (implementOut.status !== 'SUCCESS' || !implementOut.result) {
+        // One sample failing is not terminal — log a memo and move on
+        // to the next sample. The stage stays open until all samples
+        // run; if no candidate passes, the round throws below.
+        attemptMemos.push({
+          attemptNum: attemptMemos.length + 1,
+          summary:
+            implementOut.errorText ?? 'implementResolution agent crashed',
+          filesChanged: [],
+          failureReasons: [
+            implementOut.errorText ?? 'implementResolution agent crashed',
+          ],
+        });
+        continue;
+      }
+      const result = implementOut.result;
       if (!detectedBaseBranch) {
         detectedBaseBranch = result.baseBranch;
       }
@@ -152,6 +173,24 @@ export async function runImplement(
         oracle,
         result
       );
+      await main.persistAgentInvocationActivity({
+        taskEventId: implementEventId,
+        capturedTrace: criticOutcome.capturedTrace,
+        errorText: criticOutcome.errorText,
+      });
+      if (criticOutcome.status !== 'SUCCESS' || !criticOutcome.result) {
+        // Critic crashed for this sample — treat like a critic-rejection
+        // memo so the loop keeps moving.
+        attemptMemos.push({
+          attemptNum: attemptMemos.length + 1,
+          summary: criticOutcome.errorText ?? 'criticResolution agent crashed',
+          filesChanged: result.filesChanged,
+          failureReasons: [
+            criticOutcome.errorText ?? 'criticResolution agent crashed',
+          ],
+        });
+        continue;
+      }
       const criticReview = criticOutcome.result;
       criticReviewList.push({ sampleId, review: criticReview });
 

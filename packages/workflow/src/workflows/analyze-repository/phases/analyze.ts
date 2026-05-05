@@ -20,10 +20,26 @@ export async function runAnalyze(
   });
   const eventId = startedStage!.eventId;
 
-  const { result } = await sandboxAgent.analyzeCodeActivity(ctx.sandboxState);
+  const out = await sandboxAgent.analyzeCodeActivity(ctx.sandboxState);
+  await main.persistAgentInvocationActivity({
+    taskEventId: eventId,
+    capturedTrace: out.capturedTrace,
+    errorText: out.errorText,
+  });
+  if (out.status !== 'SUCCESS' || !out.result) {
+    await main.updateTaskActivity({
+      taskId: ctx.taskId,
+      updateStage: {
+        eventId,
+        status: 'FAILED',
+        error: out.errorText ?? 'analyzeCode failed',
+      },
+    });
+    throw new Error(out.errorText ?? 'analyzeCode failed');
+  }
 
   await main.updateTaskActivity({
     taskId: ctx.taskId,
-    updateStage: { eventId, status: 'COMPLETED', output: result },
+    updateStage: { eventId, status: 'COMPLETED', output: out.result },
   });
 }

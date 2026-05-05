@@ -254,9 +254,14 @@ model TaskEvent {
   decidedBy     String?
   decidedByUser User?           @relation("decidedBy", fields: [decidedBy], references: [id], onDelete: SetNull)
 
-  startedAt     DateTime        @default(now())
-  endedAt       DateTime?
-  durationMs    Int?
+  startedAt        DateTime          @default(now())
+  endedAt          DateTime?
+  durationMs       Int?
+
+  // Phase 1 agent observability: each STAGE-kind event may have one or
+  // more AgentInvocation rows attached (per-agent technical telemetry,
+  // separate from the business-level event lifecycle above).
+  agentInvocations AgentInvocation[]
 
   @@unique([taskId, kind, stageKey, attemptNumber])
   @@index([taskId, startedAt])
@@ -355,8 +360,13 @@ model AttemptExecution {
 
 model AgentInvocation {
   id                 String                @id @default(cuid())
-  attemptExecutionId String
-  attemptExecution   AttemptExecution      @relation(fields: [attemptExecutionId], references: [id], onDelete: Cascade)
+  // Phase 1 (event-model link): every agent run is anchored to its parent
+  // STAGE TaskEvent. attemptExecutionId is left for legacy compatibility
+  // with the (currently unused) lifecycle tier and is now nullable.
+  taskEventId        String?
+  taskEvent          TaskEvent?            @relation(fields: [taskEventId], references: [id], onDelete: Cascade)
+  attemptExecutionId String?
+  attemptExecution   AttemptExecution?     @relation(fields: [attemptExecutionId], references: [id], onDelete: Cascade)
   agentName          String
   model              String
   status             AgentInvocationStatus @default(RUNNING)
@@ -373,6 +383,7 @@ model AgentInvocation {
   toolCalls          ToolCall[]
 
   @@index([attemptExecutionId])
+  @@index([taskEventId])
   @@map("agent_invocation")
 }
 
@@ -413,6 +424,7 @@ model ToolCall {
   endedAt           DateTime?
   durationMs        Int?
 
+  @@unique([agentInvocationId, toolUseId])
   @@index([agentInvocationId, startedAt])
   @@index([name])
   @@map("tool_call")

@@ -1,16 +1,16 @@
-import { createObserver, reproduceDefect } from '@torin/agent';
-import type {
-  AgentObservation,
-  DefectAnalysis,
-  ReproductionOracle,
-} from '@torin/domain';
+import { reproduceDefect } from '@torin/agent';
+import type { DefectAnalysis, ReproductionOracle } from '@torin/domain';
 import { connectSandbox, type SandboxState } from '@torin/sandbox';
 import { log } from '../logger.js';
+import {
+  type AgentActivityResult,
+  runAgentInActivity,
+} from '../utils/agent-activity.js';
 
 export async function reproduceDefectActivity(
   state: SandboxState,
   analysis: DefectAnalysis
-): Promise<{ result: ReproductionOracle; observation: AgentObservation }> {
+): Promise<AgentActivityResult<ReproductionOracle>> {
   log.info(
     {
       hasTestInfra: analysis.hasTestInfra,
@@ -20,16 +20,20 @@ export async function reproduceDefectActivity(
     'Starting reproduction activity'
   );
   const sandbox = await connectSandbox(state);
-  const observer = createObserver('reproduce', 'reproduceDefect');
-  const result = await reproduceDefect(sandbox, analysis, observer);
-  const observation = observer.collect();
-  log.info(
-    {
-      mode: result.mode,
-      confirmedFailing: result.confirmedFailing,
-      eventCount: observation.events.length,
-    },
-    'Reproduction activity complete'
+  const out = await runAgentInActivity(
+    'reproduce',
+    'reproduceDefect',
+    (observer) => reproduceDefect(sandbox, analysis, observer)
   );
-  return { result, observation };
+  if (out.result) {
+    log.info(
+      {
+        mode: out.result.mode,
+        confirmedFailing: out.result.confirmedFailing,
+        eventCount: out.observation.events.length,
+      },
+      'Reproduction activity complete'
+    );
+  }
+  return out;
 }

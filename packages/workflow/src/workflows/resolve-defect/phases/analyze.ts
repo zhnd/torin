@@ -30,11 +30,28 @@ export async function runAnalyze(
     });
     const eventId = startedStage!.eventId;
 
-    const { result: analysis } = await sandboxAgent.analyzeDefectActivity(
+    const out = await sandboxAgent.analyzeDefectActivity(
       ctx.sandboxState,
       input.defectDescription,
       feedback
     );
+    await main.persistAgentInvocationActivity({
+      taskEventId: eventId,
+      capturedTrace: out.capturedTrace,
+      errorText: out.errorText,
+    });
+    if (out.status !== 'SUCCESS' || !out.result) {
+      await main.updateTaskActivity({
+        taskId: ctx.taskId,
+        updateStage: {
+          eventId,
+          status: 'FAILED',
+          error: out.errorText ?? 'analyzeDefect failed',
+        },
+      });
+      throw new Error(out.errorText ?? 'analyzeDefect failed');
+    }
+    const analysis = out.result;
 
     // Trivial auto-approve gate: skip HITL for analyze when the agent
     // self-classified the defect as trivial and env flag is on.

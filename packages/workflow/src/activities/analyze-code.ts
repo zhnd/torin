@@ -1,19 +1,25 @@
-import { analyzeRepository, createObserver } from '@torin/agent';
-import type { AgentObservation, AnalysisResult } from '@torin/domain';
+import { analyzeRepository } from '@torin/agent';
+import type { AnalysisResult } from '@torin/domain';
 import { connectSandbox, type SandboxState } from '@torin/sandbox';
 import { log } from '../logger.js';
+import {
+  type AgentActivityResult,
+  runAgentInActivity,
+} from '../utils/agent-activity.js';
 
 export async function analyzeCodeActivity(
   state: SandboxState
-): Promise<{ result: AnalysisResult; observation: AgentObservation }> {
+): Promise<AgentActivityResult<AnalysisResult>> {
   log.info('Running code analysis');
   const sandbox = await connectSandbox(state);
-  const observer = createObserver('analysis', 'analyzeRepository');
-  const result = await analyzeRepository(sandbox, observer);
-  const observation = observer.collect();
-  log.info(
-    { eventCount: observation.events.length },
-    'Code analysis completed'
+  const out = await runAgentInActivity(
+    'analysis',
+    'analyzeRepository',
+    (observer) => analyzeRepository(sandbox, observer)
   );
-  return { result, observation };
+  log.info(
+    { eventCount: out.observation.events.length, status: out.status },
+    'Code analysis activity returned'
+  );
+  return out;
 }

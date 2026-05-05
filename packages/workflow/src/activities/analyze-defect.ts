@@ -1,29 +1,32 @@
-import { analyzeDefect, createObserver } from '@torin/agent';
-import type { AgentObservation, DefectAnalysis } from '@torin/domain';
+import { analyzeDefect } from '@torin/agent';
+import type { DefectAnalysis } from '@torin/domain';
 import { connectSandbox, type SandboxState } from '@torin/sandbox';
 import { log } from '../logger.js';
+import {
+  type AgentActivityResult,
+  runAgentInActivity,
+} from '../utils/agent-activity.js';
 
 export async function analyzeDefectActivity(
   state: SandboxState,
   defectDescription: string,
   feedback?: string
-): Promise<{ result: DefectAnalysis; observation: AgentObservation }> {
+): Promise<AgentActivityResult<DefectAnalysis>> {
   log.info({ hasFeedback: !!feedback }, 'Starting defect analysis activity');
   const sandbox = await connectSandbox(state);
-  const observer = createObserver('analysis', 'analyzeDefect');
-  const result = await analyzeDefect(
-    sandbox,
-    defectDescription,
-    feedback,
-    observer
+  const out = await runAgentInActivity(
+    'analysis',
+    'analyzeDefect',
+    (observer) => analyzeDefect(sandbox, defectDescription, feedback, observer)
   );
-  const observation = observer.collect();
-  log.info(
-    {
-      rootCause: result.rootCause.slice(0, 100),
-      eventCount: observation.events.length,
-    },
-    'Defect analysis complete'
-  );
-  return { result, observation };
+  if (out.result) {
+    log.info(
+      {
+        rootCause: out.result.rootCause.slice(0, 100),
+        eventCount: out.observation.events.length,
+      },
+      'Defect analysis complete'
+    );
+  }
+  return out;
 }

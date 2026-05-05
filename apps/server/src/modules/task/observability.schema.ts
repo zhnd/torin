@@ -67,7 +67,13 @@ builder.prismaObject('AttemptExecution', {
 builder.prismaObject('AgentInvocation', {
   fields: (t) => ({
     id: t.exposeID('id'),
-    attemptExecutionId: t.exposeString('attemptExecutionId'),
+    // Phase 1 anchor (event-driven model). attemptExecutionId is kept
+    // nullable for legacy lifecycle linkage which the new pipeline does
+    // not write to.
+    taskEventId: t.exposeString('taskEventId', { nullable: true }),
+    attemptExecutionId: t.exposeString('attemptExecutionId', {
+      nullable: true,
+    }),
     agentName: t.exposeString('agentName'),
     model: t.exposeString('model'),
     status: t.exposeString('status'),

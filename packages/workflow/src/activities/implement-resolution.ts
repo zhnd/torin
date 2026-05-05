@@ -1,12 +1,15 @@
-import { createObserver, implementResolution } from '@torin/agent';
+import { implementResolution } from '@torin/agent';
 import type {
-  AgentObservation,
   DefectAnalysis,
   ReproductionOracle,
   ResolutionResult,
 } from '@torin/domain';
 import { connectSandbox, type SandboxState } from '@torin/sandbox';
 import { log } from '../logger.js';
+import {
+  type AgentActivityResult,
+  runAgentInActivity,
+} from '../utils/agent-activity.js';
 
 export async function implementResolutionActivity(
   state: SandboxState,
@@ -14,7 +17,7 @@ export async function implementResolutionActivity(
   analysis: DefectAnalysis,
   oracle: ReproductionOracle | null,
   userFeedback?: string
-): Promise<{ result: ResolutionResult; observation: AgentObservation }> {
+): Promise<AgentActivityResult<ResolutionResult>> {
   log.info(
     {
       oracleMode: oracle?.mode,
@@ -24,23 +27,28 @@ export async function implementResolutionActivity(
     'Starting resolution implementation activity'
   );
   const sandbox = await connectSandbox(state);
-  const observer = createObserver('implement', 'implementResolution');
-  const result = await implementResolution(
-    sandbox,
-    defectDescription,
-    analysis,
-    oracle,
-    userFeedback,
-    observer
+  const out = await runAgentInActivity(
+    'implement',
+    'implementResolution',
+    (observer) =>
+      implementResolution(
+        sandbox,
+        defectDescription,
+        analysis,
+        oracle,
+        userFeedback,
+        observer
+      )
   );
-  const observation = observer.collect();
-  log.info(
-    {
-      branch: result.branch,
-      testsPassed: result.testsPassed,
-      eventCount: observation.events.length,
-    },
-    'Resolution implementation complete'
-  );
-  return { result, observation };
+  if (out.result) {
+    log.info(
+      {
+        branch: out.result.branch,
+        testsPassed: out.result.testsPassed,
+        eventCount: out.observation.events.length,
+      },
+      'Resolution implementation complete'
+    );
+  }
+  return out;
 }

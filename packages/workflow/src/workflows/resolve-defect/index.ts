@@ -172,10 +172,27 @@ async function runReproduce(
     return null;
   }
 
-  const { result: oracle } = await sandboxAgent.reproduceDefectActivity(
+  const reproduceOut = await sandboxAgent.reproduceDefectActivity(
     ctx.sandboxState,
     analysis
   );
+  await main.persistAgentInvocationActivity({
+    taskEventId: eventId,
+    capturedTrace: reproduceOut.capturedTrace,
+    errorText: reproduceOut.errorText,
+  });
+  if (reproduceOut.status !== 'SUCCESS' || !reproduceOut.result) {
+    await main.updateTaskActivity({
+      taskId: ctx.taskId,
+      updateStage: {
+        eventId,
+        status: 'FAILED',
+        error: reproduceOut.errorText ?? 'reproduceDefect failed',
+      },
+    });
+    throw new Error(reproduceOut.errorText ?? 'reproduceDefect failed');
+  }
+  const oracle = reproduceOut.result;
 
   if (oracle.mode === 'none') {
     await main.updateTaskActivity({

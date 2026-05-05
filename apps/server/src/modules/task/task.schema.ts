@@ -93,6 +93,12 @@ builder.prismaObject('TaskEvent', {
     startedAt: t.expose('startedAt', { type: 'DateTime' }),
     endedAt: t.expose('endedAt', { type: 'DateTime', nullable: true }),
     durationMs: t.exposeInt('durationMs', { nullable: true }),
+    // Phase 1 agent observability: per-event agent invocation list.
+    // Empty for REVIEW-kind events and for STAGE events whose stage has
+    // no agent (e.g. FILTER, PR).
+    agentInvocations: t.relation('agentInvocations', {
+      query: { orderBy: { startedAt: 'asc' } },
+    }),
   }),
 });
 
