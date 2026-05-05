@@ -29,8 +29,7 @@ export const STAGE_STATUS = {
   FAILED: 'FAILED',
   SKIPPED: 'SKIPPED',
 } as const;
-export type StageStatusValue =
-  (typeof STAGE_STATUS)[keyof typeof STAGE_STATUS];
+export type StageStatusValue = (typeof STAGE_STATUS)[keyof typeof STAGE_STATUS];
 
 export const AGENT_INVOCATION_STATUS = {
   RUNNING: 'RUNNING',

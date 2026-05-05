@@ -37,7 +37,8 @@ export const TASK_EVENT_TYPE = {
   SandboxDestroyed: 'SandboxDestroyed',
 } as const;
 
-export type TaskEventType = (typeof TASK_EVENT_TYPE)[keyof typeof TASK_EVENT_TYPE];
+export type TaskEventType =
+  (typeof TASK_EVENT_TYPE)[keyof typeof TASK_EVENT_TYPE];
 
 // ── Payload schemas (one per eventType) ─────────────────
 

@@ -102,7 +102,10 @@ function extractObjectShape(schema: ZodType<unknown>): {
       // Verify at least one value looks like a zod type (has `parse`)
       const first = Object.values(candidate)[0];
       if (first && typeof first === 'object' && 'parse' in first) {
-        return { shape: candidate as Record<string, unknown>, isWrapped: false };
+        return {
+          shape: candidate as Record<string, unknown>,
+          isWrapped: false,
+        };
       }
     }
   } catch {
