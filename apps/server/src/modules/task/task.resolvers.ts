@@ -2,6 +2,7 @@ import { builder } from '../../infrastructure/graphql/builder.js';
 import { AnalyzeRepositoryService } from './services/analyze-repository.service.js';
 import { CancelTaskService } from './services/cancel-task.service.js';
 import { ResolveDefectService } from './services/resolve-defect.service.js';
+import { RetryTaskService } from './services/retry-task.service.js';
 import { ReviewTaskService } from './services/review-task.service.js';
 
 // ── Queries ──────────────────────────────────────────────
@@ -111,6 +112,20 @@ builder.mutationField('cancelTask', (t) =>
     },
     resolve: async (query, _parent, args, ctx) => {
       const service = new CancelTaskService(ctx.prisma);
+      return service.execute(query, args.taskId, ctx.user);
+    },
+  })
+);
+
+builder.mutationField('retryTask', (t) =>
+  t.prismaField({
+    type: 'Task',
+    authScopes: { authenticated: true },
+    args: {
+      taskId: t.arg.string({ required: true }),
+    },
+    resolve: async (query, _parent, args, ctx) => {
+      const service = new RetryTaskService(ctx.prisma);
       return service.execute(query, args.taskId, ctx.user);
     },
   })

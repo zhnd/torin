@@ -237,3 +237,11 @@ export const REVIEW_TASK = gql`
   }
   ${TASK_FIELDS}
 `;
+
+export const RETRY_TASK = gql`
+  mutation RetryTask($taskId: String!) {
+    retryTask(taskId: $taskId) {
+      id
+    }
+  }
+`;

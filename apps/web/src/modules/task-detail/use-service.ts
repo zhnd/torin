@@ -1,9 +1,15 @@
 'use client';
 
 import { useMutation, useQuery, useSubscription } from '@apollo/client';
+import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { GET_TASK, REVIEW_TASK, TASK_UPDATED } from '@/modules/tasks/graphql';
+import {
+  GET_TASK,
+  RETRY_TASK,
+  REVIEW_TASK,
+  TASK_UPDATED,
+} from '@/modules/tasks/graphql';
 import { transformTaskToDetail } from '@/modules/tasks/transform';
 import { computeHitlWaited, computeStageTimings } from './libs';
 import type {
@@ -96,6 +102,8 @@ export function useService({ taskId }: UseServiceInput) {
   );
 
   const [reviewTask, { loading: reviewing }] = useMutation(REVIEW_TASK);
+  const router = useRouter();
+  const [retryTask, { loading: retrying }] = useMutation(RETRY_TASK);
 
   const submitReview = useCallback(
     async (lane: string, feedback: string) => {
@@ -108,12 +116,26 @@ export function useService({ taskId }: UseServiceInput) {
           lane === 'approve' ? 'Approved — opening PR' : 'Feedback sent'
         );
         await refetch();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Review failed');
+      } catch {
+        // Error already surfaced by the Apollo error link (toast).
+        // No additional handling needed here.
       }
     },
     [reviewTask, refetch, taskId]
   );
+
+  const retry = useCallback(async () => {
+    try {
+      const { data } = await retryTask({ variables: { taskId } });
+      const newId = data?.retryTask?.id;
+      if (newId) {
+        toast.success('Retry queued — opening new task');
+        router.push(`/tasks/${newId}`);
+      }
+    } catch {
+      // Error already surfaced by the Apollo error link.
+    }
+  }, [retryTask, router, taskId]);
 
   return {
     loading,
@@ -128,6 +150,8 @@ export function useService({ taskId }: UseServiceInput) {
     hitlWaited,
     submitReview,
     reviewing,
+    retry,
+    retrying,
   };
 }
 

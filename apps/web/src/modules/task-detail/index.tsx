@@ -40,6 +40,8 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
     hitlWaited,
     submitReview,
     reviewing,
+    retry,
+    retrying,
   } = useService({ taskId });
 
   if (loading && !detail) {
@@ -131,6 +133,8 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
             <FailurePanel
               message={detail.task.error}
               occurredAt={detail.task.completedAt}
+              onRetry={retry}
+              retryPending={retrying}
             />
           )}
           <Tally className="mt-3" />
