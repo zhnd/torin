@@ -3,8 +3,12 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "build": "pnpm -r build",
-    "generate": "pnpm -r generate",
+    "build": "turbo run build",
+    "generate": "turbo run generate",
+    "codegen": "turbo run codegen",
+    "check-types": "turbo run check-types",
+    "dev": "turbo run dev",
+    "clean": "turbo run clean",
     "update:all": "pnpm install && pnpm generate",
     "preinstall": "npx only-allow pnpm",
     "format-fix": "biome format --write",
@@ -29,6 +33,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "pino-pretty": "^13.0.0",
+    "turbo": "^2.9.9",
     "typescript": "^6.0.2"
   }
 }

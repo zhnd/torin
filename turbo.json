@@ -1,0 +1,28 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build", "generate", "codegen"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "generate": {
+      "dependsOn": ["^generate"],
+      "cache": false
+    },
+    "codegen": {
+      "dependsOn": ["@torin/server#generate"],
+      "outputs": ["src/__generated__/**"]
+    },
+    "check-types": {
+      "dependsOn": ["^build", "generate", "codegen"]
+    },
+    "clean": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}
