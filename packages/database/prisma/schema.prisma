@@ -90,18 +90,20 @@ enum AgentInvocationStatus {
 // ── Auth (better-auth) ─────────────────────────────────────────
 
 model User {
-  id            String      @id
-  name          String
-  email         String
-  emailVerified Boolean     @default(false)
-  image         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  projects      Project[]
-  tasks         Task[]
-  taskReviews   TaskEvent[] @relation("decidedBy")
+  id                       String                    @id
+  name                     String
+  email                    String
+  emailVerified            Boolean                   @default(false)
+  image                    String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  sessions                 Session[]
+  accounts                 Account[]
+  projects                 Project[]
+  tasks                    Task[]
+  taskReviews              TaskEvent[]               @relation("decidedBy")
+  tapdCredential           TapdCredential?
+  tapdWorkspaceProjectMaps TapdWorkspaceProjectMap[]
 
   @@unique([email])
   @@map("user")
@@ -175,11 +177,52 @@ model Project {
   userId               String
   user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks                Task[]
+  tapdMappings         TapdWorkspaceProjectMap[]
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
   @@index([userId])
   @@map("project")
+}
+
+// ── Tapd integration ───────────────────────────────────────────
+//
+// One credential row per user (Tapd accounts are personal). The
+// encrypted secret is always a Tapd Personal Access Token, encrypted
+// with the same AES-256-GCM key as Project credentials.
+
+model TapdCredential {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedSecret String
+  /// Tapd login handle (UserWorkspace.user) discovered server-side at
+  /// save time and cached. Used as `current_owner` filter on /bugs so
+  /// the form never has to ask the user for it.
+  tapdNick        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("tapd_credential")
+}
+
+// Each (user, Tapd workspace) maps to exactly one Torin Project. We
+// store this so the Tapd inbox knows which Project to dispatch a
+// resolve-defect workflow against without the user picking on each
+// trigger.
+model TapdWorkspaceProjectMap {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  projectId   String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, workspaceId])
+  @@index([projectId])
+  @@map("tapd_workspace_project_map")
 }
 
 // ── Tasks ──────────────────────────────────────────────────────

@@ -20,6 +20,13 @@ export interface ResolveDefectInput {
    * auth layer.
    */
   userId?: string;
+  /**
+   * Caller-chosen base branch. When set, the workflow checks out this
+   * branch before sample 1 instead of letting the sandbox / agent pick
+   * the repo default. Used by the Tapd-triggered flow (and any other
+   * caller that wants to target a release branch).
+   */
+  baseBranch?: string;
 }
 
 /**
