@@ -12,6 +12,13 @@ import {
 
 export interface AgentObserver {
   onMessage(message: unknown): void;
+  /**
+   * Record an out-of-band failure (e.g., SDK iterator threw before a
+   * terminal `result` message was produced). Sets `errorText` on the
+   * trace and flips status to ERROR if not already terminal. No-op if
+   * the run has already completed.
+   */
+  recordError(message: string): void;
   /** Legacy view: stage-level events + cost summary, consumed by the
    *  TaskEvent path. Untouched for back-compat. */
   collect(): AgentObservation;
@@ -209,6 +216,23 @@ export function createObserver(
           });
         }
       }
+    },
+
+    recordError(message: string) {
+      if (invocationStatus !== AGENT_INVOCATION_STATUS.RUNNING) return;
+      invocationStatus = AGENT_INVOCATION_STATUS.ERROR;
+      errorText = message.slice(0, 500);
+      const nowIso = new Date().toISOString();
+      endedAtIso = nowIso;
+      invocationDurationMs = Date.parse(nowIso) - startedAtMs;
+      events.push({
+        stage,
+        event: 'Agent error',
+        level: 'error',
+        agent: agentName,
+        details: errorText,
+        timestamp: nowIso,
+      });
     },
 
     collect(): AgentObservation {

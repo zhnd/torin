@@ -2,9 +2,9 @@ import { type Options, query } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentObservation } from '@torin/domain';
 import type { ZodType } from 'zod/v4';
 import { log } from '../logger.js';
+import { createSubmitResultServer } from '../tools/submit-result-server.js';
 import { type AgentObserver, createObserver } from './observer.js';
 import { parseAgentJson } from './parse-json.js';
-import { createSubmitResultServer } from '../tools/submit-result-server.js';
 
 export interface RunAgentInput<T> {
   /** Name used in logs and observer events. */
@@ -96,7 +96,7 @@ export async function runAgent<T>(
   // tool name, forwarding everything else unchanged.
   const originalCanUseTool = input.queryOptions.canUseTool;
   const canUseTool = submit
-    ? (async (...args: Parameters<NonNullable<Options['canUseTool']>>) => {
+    ? ((async (...args: Parameters<NonNullable<Options['canUseTool']>>) => {
         if (args[0] === submit.toolName) {
           return { behavior: 'allow' as const };
         }
@@ -104,7 +104,7 @@ export async function runAgent<T>(
           return originalCanUseTool(...args);
         }
         return { behavior: 'allow' as const };
-      }) satisfies Options['canUseTool']
+      }) satisfies Options['canUseTool'])
     : input.queryOptions.canUseTool;
 
   log.info(
@@ -114,24 +114,34 @@ export async function runAgent<T>(
 
   let lastResult: string | undefined;
 
-  for await (const message of query({
-    prompt: input.userPrompt,
-    options: {
-      ...input.queryOptions,
-      systemPrompt: input.systemPrompt,
-      model,
-      mcpServers,
-      allowedTools,
-      canUseTool,
-    },
-  })) {
-    observer.onMessage(message);
-    if (
-      (message as Record<string, unknown>).type === 'result' &&
-      (message as Record<string, unknown>).subtype === 'success'
-    ) {
-      lastResult = (message as { result: string }).result;
+  try {
+    for await (const message of query({
+      prompt: input.userPrompt,
+      options: {
+        ...input.queryOptions,
+        systemPrompt: input.systemPrompt,
+        model,
+        mcpServers,
+        allowedTools,
+        canUseTool,
+      },
+    })) {
+      observer.onMessage(message);
+      if (
+        (message as Record<string, unknown>).type === 'result' &&
+        (message as Record<string, unknown>).subtype === 'success'
+      ) {
+        lastResult = (message as { result: string }).result;
+      }
     }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    observer.recordError(message);
+    log.error(
+      { agent: input.agentName, model, err },
+      `${input.agentName} SDK iteration failed`
+    );
+    throw err;
   }
 
   // ── Extract result ─────────────────────────────────────────

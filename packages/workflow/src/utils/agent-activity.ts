@@ -1,3 +1,4 @@
+import { Context } from '@temporalio/activity';
 import { type AgentObserver, createObserver } from '@torin/agent';
 import {
   AGENT_INVOCATION_STATUS,
@@ -6,6 +7,13 @@ import {
   type AgentObservation,
 } from '@torin/domain';
 import { log } from '../logger.js';
+
+/**
+ * How often the agent activity beats to Temporal. Must be safely below
+ * the proxy's `heartbeatTimeout` (currently 60s on sandboxAgent) so a
+ * hung tool call is detected promptly.
+ */
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 /**
  * Standard return shape for every agent-driven activity (decision A1
@@ -42,6 +50,19 @@ export async function runAgentInActivity<T>(
   fn: (observer: AgentObserver) => Promise<T>
 ): Promise<AgentActivityResult<T>> {
   const observer = createObserver(stage, agentName);
+
+  // Periodic heartbeat keeps Temporal aware that this activity is alive
+  // even when the agent is silent (e.g., waiting on a slow tool call).
+  // The proxy sets heartbeatTimeout: 60s; firing every 30s gives 2x
+  // margin before Temporal would consider us dead and reschedule.
+  const heartbeatTimer = setInterval(() => {
+    try {
+      Context.current().heartbeat();
+    } catch {
+      // Outside an activity context (e.g. unit test) — silently ignore.
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+
   try {
     const result = await fn(observer);
     return {
@@ -52,6 +73,7 @@ export async function runAgentInActivity<T>(
     };
   } catch (err) {
     const errorText = err instanceof Error ? err.message : String(err);
+    observer.recordError(errorText);
     log.warn(
       { agentName, stage, err: errorText },
       'agent activity caught error; returning partial trace'
@@ -62,5 +84,7 @@ export async function runAgentInActivity<T>(
       status: AGENT_INVOCATION_STATUS.ERROR,
       errorText,
     };
+  } finally {
+    clearInterval(heartbeatTimer);
   }
 }
