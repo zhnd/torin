@@ -5,5 +5,6 @@ import '../../modules/auth/index.js';
 import '../../modules/project/index.js';
 import '../../modules/workflow/index.js';
 import '../../modules/task/index.js';
+import '../../modules/tapd/index.js';
 
 export const schema = builder.toSchema();

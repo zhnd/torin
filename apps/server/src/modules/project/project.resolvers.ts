@@ -3,6 +3,7 @@ import { CreateProjectInput } from './dto/create-project.input.js';
 import { UpdateProjectInput } from './dto/update-project.input.js';
 import { CreateProjectService } from './services/create-project.service.js';
 import { DeleteProjectService } from './services/delete-project.service.js';
+import { ListProjectBranchesService } from './services/list-project-branches.service.js';
 import { UpdateProjectService } from './services/update-project.service.js';
 
 // ── Queries ──────────────────────────────────────────────
@@ -33,6 +34,21 @@ builder.queryField('project', (t) =>
         ...query,
         where: { id: args.id, userId: ctx.user?.id },
       }),
+  })
+);
+
+builder.queryField('projectBranches', (t) =>
+  t.field({
+    type: ['String'],
+    authScopes: { authenticated: true },
+    args: {
+      projectId: t.arg.string({ required: true }),
+    },
+    resolve: (_parent, args, ctx) =>
+      new ListProjectBranchesService(ctx.prisma).execute(
+        args.projectId,
+        ctx.user
+      ),
   })
 );
 

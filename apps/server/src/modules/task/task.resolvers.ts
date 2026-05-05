@@ -71,15 +71,27 @@ builder.mutationField('resolveDefect', (t) =>
     args: {
       projectId: t.arg.string({ required: true }),
       defectDescription: t.arg.string({ required: true }),
+      baseBranch: t.arg.string({
+        description:
+          'Optional target branch the workflow should base the fix on. When omitted, the sandbox auto-detects the repo default.',
+      }),
+      tapdBugId: t.arg.string({
+        description:
+          'Tapd bug id this task was triggered from. Stored on Task.input for audit.',
+      }),
+      tapdWorkspaceId: t.arg.string({
+        description: 'Tapd workspace_id paired with tapdBugId.',
+      }),
     },
     resolve: async (query, _parent, args, ctx) => {
       const service = new ResolveDefectService(ctx.prisma);
-      return service.execute(
-        query,
-        args.projectId,
-        args.defectDescription,
-        ctx.user
-      );
+      return service.execute(query, ctx.user, {
+        projectId: args.projectId,
+        defectDescription: args.defectDescription,
+        baseBranch: args.baseBranch ?? undefined,
+        tapdBugId: args.tapdBugId ?? undefined,
+        tapdWorkspaceId: args.tapdWorkspaceId ?? undefined,
+      });
     },
   })
 );
