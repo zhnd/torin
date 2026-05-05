@@ -7,6 +7,7 @@ import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { PasswordForm } from './components/password-form';
 import { ProfileForm } from './components/profile-form';
+import { TapdCredentialCard } from './components/tapd-credential-card';
 import { useService } from './use-service';
 
 export function Settings() {
@@ -124,6 +125,8 @@ export function Settings() {
               </div>
               <PasswordForm />
             </PanelCard>
+
+            <TapdCredentialCard />
           </div>
         </div>
       </div>

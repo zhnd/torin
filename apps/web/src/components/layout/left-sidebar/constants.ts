@@ -1,4 +1,5 @@
 import {
+  Bug,
   FolderGit2,
   Inbox,
   LayoutGrid,
@@ -16,6 +17,7 @@ export interface NavigationItem {
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutGrid },
   { label: 'Inbox', href: '/inbox', icon: Inbox },
+  { label: 'Tapd', href: '/tapd', icon: Bug },
   { label: 'Tasks', href: '/tasks', icon: ListChecks },
   { label: 'Projects', href: '/projects', icon: FolderGit2 },
   { label: 'Settings', href: '/settings', icon: SettingsIcon },

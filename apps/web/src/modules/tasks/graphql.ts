@@ -221,8 +221,20 @@ export const TASK_UPDATED = gql`
 `;
 
 export const RESOLVE_DEFECT = gql`
-  mutation ResolveDefect($projectId: String!, $defectDescription: String!) {
-    resolveDefect(projectId: $projectId, defectDescription: $defectDescription) {
+  mutation ResolveDefect(
+    $projectId: String!
+    $defectDescription: String!
+    $baseBranch: String
+    $tapdBugId: String
+    $tapdWorkspaceId: String
+  ) {
+    resolveDefect(
+      projectId: $projectId
+      defectDescription: $defectDescription
+      baseBranch: $baseBranch
+      tapdBugId: $tapdBugId
+      tapdWorkspaceId: $tapdWorkspaceId
+    ) {
       ...TaskFields
     }
   }
