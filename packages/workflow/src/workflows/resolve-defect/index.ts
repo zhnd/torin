@@ -24,8 +24,28 @@ import { buildPrStageInput, buildReproduceStageInput } from './transformer.js';
 
 export const reviewSignal = defineSignal<[ReviewDecision]>('reviewDecision');
 
+/**
+ * Soft cap on how long a HITL gate may block. If a reviewer never
+ * decides within this window, the gate raises HitlTimeoutError so the
+ * workflow can put the task in FAILED instead of holding the sandbox
+ * + workflow-task slot indefinitely. 72h is enough to survive a long
+ * weekend and still recover resources before they leak.
+ */
+const HITL_TIMEOUT_MS = 72 * 60 * 60 * 1000;
+
+export class HitlTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    const hours = Math.round(timeoutMs / 3_600_000);
+    super(`HITL review window expired after ${hours}h with no decision`);
+    this.name = 'HitlTimeoutError';
+  }
+}
+
 export interface ReviewGate {
-  /** Reset state and await the next review submission. */
+  /**
+   * Reset state and await the next review submission, bounded by
+   * HITL_TIMEOUT_MS. Throws HitlTimeoutError on expiry.
+   */
   resetAndWait(): Promise<void>;
   /** Read the value left by the latest signal (caller must have awaited). */
   consume(): ReviewDecision;
@@ -41,9 +61,15 @@ function createReviewGate(): ReviewGate {
     result = decision;
   });
   return {
-    resetAndWait() {
+    async resetAndWait() {
       result = undefined;
-      return condition(() => result !== undefined);
+      const arrived = await condition(
+        () => result !== undefined,
+        HITL_TIMEOUT_MS
+      );
+      if (!arrived) {
+        throw new HitlTimeoutError(HITL_TIMEOUT_MS);
+      }
     },
     consume() {
       return result as unknown as ReviewDecision;

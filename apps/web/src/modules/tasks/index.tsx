@@ -116,22 +116,24 @@ export function Tasks() {
               <thead>
                 <tr className="border-b border-border-faint bg-surface-cream/40">
                   {[
-                    'Task',
-                    'Project',
-                    'Status',
-                    'Pipeline',
-                    'Duration',
-                    'Cost',
-                    '',
+                    { label: 'Task', mobile: true },
+                    { label: 'Project', mobile: false },
+                    { label: 'Status', mobile: true },
+                    { label: 'Pipeline', mobile: false },
+                    { label: 'Duration', mobile: false },
+                    { label: 'Cost', mobile: false },
+                    { label: '', mobile: true },
                   ].map((h, i) => (
                     <th
-                      key={h || `h-${i}`}
+                      key={h.label || `h-${i}`}
                       className={cn(
                         'whitespace-nowrap px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-foreground-subtle',
-                        (h === 'Duration' || h === 'Cost') && 'text-right'
+                        (h.label === 'Duration' || h.label === 'Cost') &&
+                          'text-right',
+                        !h.mobile && 'hidden md:table-cell'
                       )}
                     >
-                      {h}
+                      {h.label}
                     </th>
                   ))}
                 </tr>
@@ -143,7 +145,7 @@ export function Tasks() {
                     className="group transition-colors hover:bg-surface-2"
                   >
                     <td className="border-b border-border-faint px-4 py-3 align-middle">
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <span
                           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm font-mono text-[11px] font-medium text-background"
                           style={{
@@ -159,26 +161,32 @@ export function Tasks() {
                         >
                           {humanizeTaskType(t.type).charAt(0).toUpperCase()}
                         </span>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <Link
                             href={`/tasks/${t.id}`}
-                            className="text-[12.5px] font-semibold text-foreground no-underline"
+                            className="block truncate text-[12.5px] font-semibold text-foreground no-underline"
                           >
                             {humanizeTaskType(t.type)}
                           </Link>
-                          <div className="mt-px font-mono text-[10.5px] text-foreground-subtle">
+                          <div className="mt-px truncate font-mono text-[10.5px] text-foreground-subtle">
                             {t.id}
                           </div>
+                          {/* Mobile-only: project name shown below the title since the column is hidden */}
+                          {t.project?.name && (
+                            <div className="mt-0.5 truncate text-[11px] text-foreground-muted md:hidden">
+                              {t.project.name}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
-                    <td className="border-b border-border-faint px-4 py-3 align-middle text-[12px] text-foreground-muted">
+                    <td className="hidden border-b border-border-faint px-4 py-3 align-middle text-[12px] text-foreground-muted md:table-cell">
                       {t.project?.name ?? '—'}
                     </td>
                     <td className="border-b border-border-faint px-4 py-3 align-middle">
                       <StatusChip status={t.status} />
                     </td>
-                    <td className="border-b border-border-faint px-4 py-3 align-middle">
+                    <td className="hidden border-b border-border-faint px-4 py-3 align-middle md:table-cell">
                       <MiniTrack
                         stages={
                           (t.stages ?? {}) as Partial<
@@ -187,10 +195,10 @@ export function Tasks() {
                         }
                       />
                     </td>
-                    <td className="border-b border-border-faint px-4 py-3 text-right align-middle font-mono text-[12px] text-foreground-muted">
+                    <td className="hidden border-b border-border-faint px-4 py-3 text-right align-middle font-mono text-[12px] text-foreground-muted md:table-cell">
                       {formatDuration(t.durationMs)}
                     </td>
-                    <td className="border-b border-border-faint px-4 py-3 text-right align-middle font-mono text-[12px] text-foreground">
+                    <td className="hidden border-b border-border-faint px-4 py-3 text-right align-middle font-mono text-[12px] text-foreground md:table-cell">
                       {formatCost(t.totalCostUsd)}
                     </td>
                     <td className="border-b border-border-faint px-4 py-3 align-middle">
