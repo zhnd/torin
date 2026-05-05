@@ -41,6 +41,17 @@ function isValidUrl(value: string): boolean {
 const HEX_64 = /^[0-9a-fA-F]{64}$/;
 const DEV_AUTH_SECRET = 'dev-secret-key-change-in-production';
 
+/**
+ * Recognizable placeholder marker used in .env.example. Anyone copying
+ * the example without filling values gets a clear error here instead
+ * of running with a known-public secret.
+ */
+const PLACEHOLDER_PREFIX = 'REPLACE_ME';
+
+function looksLikePlaceholder(value: string): boolean {
+  return value.startsWith(PLACEHOLDER_PREFIX);
+}
+
 export function validateEnv(): Env {
   const errors: string[] = [];
   const raw = process.env;
@@ -91,6 +102,10 @@ export function validateEnv(): Env {
 
   if (!raw.BETTER_AUTH_SECRET) {
     errors.push('BETTER_AUTH_SECRET is required');
+  } else if (looksLikePlaceholder(raw.BETTER_AUTH_SECRET)) {
+    errors.push(
+      'BETTER_AUTH_SECRET is still the .env.example placeholder — generate one via `openssl rand -base64 48`'
+    );
   } else if (
     raw.BETTER_AUTH_SECRET === DEV_AUTH_SECRET &&
     nodeEnv === 'production'
@@ -104,6 +119,10 @@ export function validateEnv(): Env {
 
   if (!raw.CREDENTIALS_ENCRYPTION_KEY) {
     errors.push('CREDENTIALS_ENCRYPTION_KEY is required');
+  } else if (looksLikePlaceholder(raw.CREDENTIALS_ENCRYPTION_KEY)) {
+    errors.push(
+      'CREDENTIALS_ENCRYPTION_KEY is still the .env.example placeholder — generate one via `openssl rand -hex 32`'
+    );
   } else if (!HEX_64.test(raw.CREDENTIALS_ENCRYPTION_KEY)) {
     errors.push(
       'CREDENTIALS_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)'
