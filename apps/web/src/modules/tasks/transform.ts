@@ -213,6 +213,8 @@ export function transformTaskToItem(apiTask: ApiTask): TaskItem {
     createdAt: apiTask.createdAt,
     projectName: apiTask.project?.name ?? '',
     triggerSource: 'manual',
+    error: apiTask.error ?? null,
+    completedAt: apiTask.completedAt ?? null,
   };
 }
 

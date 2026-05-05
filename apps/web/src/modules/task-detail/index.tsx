@@ -12,6 +12,7 @@ import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { DetailTabsBar } from './components/detail-tabs-bar';
 import { EventsView } from './components/events-view';
+import { FailurePanel } from './components/failure-panel';
 import { HeroStat } from './components/hero-stat';
 import { OverflowMenu } from './components/overflow-menu';
 import { StageBody } from './components/stage-body';
@@ -126,6 +127,12 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
               />
             </div>
           </div>
+          {detail.task.status === 'failed' && detail.task.error && (
+            <FailurePanel
+              message={detail.task.error}
+              occurredAt={detail.task.completedAt}
+            />
+          )}
           <Tally className="mt-3" />
         </div>
 

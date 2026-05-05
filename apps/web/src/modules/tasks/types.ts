@@ -63,6 +63,10 @@ export interface TaskItem {
   createdAt: string;
   projectName: string;
   triggerSource: string;
+  /** Terminal-only error text, populated when status is failed/cancelled. */
+  error: string | null;
+  /** Server-recorded terminal timestamp; null while still running. */
+  completedAt: string | null;
 }
 
 export interface TimelineEvent {
