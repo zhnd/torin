@@ -3,9 +3,8 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "turbo": "turbo",
-    "build": "turbo run build --cache-dir=.turbo",
-    "generate": "turbo run generate",
+    "build": "pnpm -r build",
+    "generate": "pnpm -r generate",
     "update:all": "pnpm install && pnpm generate",
     "preinstall": "npx only-allow pnpm",
     "format-fix": "biome format --write",

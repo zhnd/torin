@@ -90,15 +90,18 @@
     0 0 0 1px oklch(0.18 0.012 264 / 0.06),
     0 4px 16px -8px oklch(0.18 0.012 264 / 0.12);
 
-  /* Font tokens — Geist Sans body, Geist Mono for display + IDs.
-     `--font-display` now resolves to mono so legacy `font-display`
-     selectors automatically inherit the engineering treatment. */
+  /* Font tokens — system stack only (Geist removed to avoid network
+     fetches at build time). `--font-display` shares the mono stack so
+     legacy `font-display` selectors keep the engineering treatment. */
   --font-sans:
-    var(--font-geist-sans), "Inter", "SF Pro Text", system-ui, sans-serif;
+    "Inter", "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
   --font-mono:
-    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
   --font-display:
-    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
 }
 
 .dark {

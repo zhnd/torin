@@ -1,21 +1,14 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
 import { ApolloWrapper } from '@/libs/apollo';
 import './globals.css';
 
-const geistSans = Geist({
-  subsets: ['latin'],
-  variable: '--font-geist-sans',
-  display: 'swap',
-});
-
-const geistMono = Geist_Mono({
-  subsets: ['latin'],
-  variable: '--font-geist-mono',
-  display: 'swap',
-});
+// next/font/google was removed in favor of the system stack defined in
+// globals.css (--font-sans / --font-mono). The Google fetch broke
+// production builds in network-restricted environments. The CSS
+// fallback chain (Inter / SF Pro Text / system-ui ...) gives a clean
+// look across platforms with zero build-time network dependency.
 
 export const metadata: Metadata = {
   title: 'Torin',
@@ -28,11 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable}`}
-    >
+    <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider
           attribute="class"
