@@ -1,9 +1,18 @@
 import cors from '@fastify/cors';
 import { loggerConfig } from '@torin/shared';
 import Fastify from 'fastify';
+import { validateEnv } from './infrastructure/env.js';
 import { registerRoutes } from './infrastructure/routes/index.js';
 import { seedWorkflowDefinitions } from './infrastructure/workflow-seed.js';
 import { log } from './logger.js';
+
+let env: ReturnType<typeof validateEnv>;
+try {
+  env = validateEnv();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
 
 async function main(): Promise<void> {
   const app = Fastify({
@@ -11,16 +20,14 @@ async function main(): Promise<void> {
   });
 
   await app.register(cors, {
-    origin: process.env.WEB_URL ? process.env.WEB_URL.split(',') : true,
+    origin: env.WEB_URL,
     credentials: true,
   });
 
   await seedWorkflowDefinitions();
   await registerRoutes(app);
 
-  const port = Number(process.env.PORT) || 4000;
-
-  app.listen({ port, host: '0.0.0.0' }, (err, address) => {
+  app.listen({ port: env.PORT, host: '0.0.0.0' }, (err, address) => {
     if (err) throw err;
     app.log.info(`Server ready at: ${address}`);
   });
