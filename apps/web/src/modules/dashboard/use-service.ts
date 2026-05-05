@@ -19,7 +19,12 @@ import type { DashboardProject, DashboardTask } from './types';
  * in pure helpers (`./libs`).
  */
 export function useService() {
-  const { data, loading } = useQuery(DASHBOARD_QUERY);
+  // 5s polling matches the "live · auto-refresh" hero copy. Cheap at
+  // current scale (per-user task counts are small); revisit if the
+  // dashboard ever loads thousands of rows.
+  const { data, loading } = useQuery(DASHBOARD_QUERY, {
+    pollInterval: 5_000,
+  });
 
   const projects: DashboardProject[] = data?.projects ?? [];
   const tasks: DashboardTask[] = data?.tasks ?? [];

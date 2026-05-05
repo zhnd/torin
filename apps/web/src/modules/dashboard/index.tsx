@@ -122,14 +122,9 @@ export function Dashboard() {
           <StatTile
             index="05"
             label="Tokens · today"
-            value={loading ? '—' : '24.6k'}
-            hint="across 12 runs · $4.31"
+            value="—"
+            hint="Not tracked yet"
             icon={Sparkles}
-            trailing={
-              <span className="font-mono text-[9.5px] font-medium text-ok">
-                ▲ 12%
-              </span>
-            }
           />
         </div>
 
@@ -159,7 +154,7 @@ export function Dashboard() {
             <ProjectActivity rows={projectActivity} />
           </PanelCard>
 
-          <PanelCard title="Agent pool" caption="03/08 engaged">
+          <PanelCard title="Agent pool" caption="Not tracked yet">
             <AgentPool />
           </PanelCard>
         </div>
@@ -280,43 +275,22 @@ function ProjectActivity({
   );
 }
 
+/**
+ * Worker concurrency / queue / throughput would be sourced from
+ * Temporal worker telemetry — not wired yet. Renders a neutral
+ * placeholder so the panel doesn't surface fabricated metrics.
+ */
 function AgentPool() {
   return (
-    <div>
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono text-[28px] font-medium leading-none tabular-nums tracking-normal text-foreground">
-          03<span className="text-foreground-faint">/08</span>
-        </span>
-        <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-foreground-muted">
-          engaged
-        </span>
+    <div className="flex flex-col gap-3 py-4">
+      <div className="font-mono text-[28px] font-medium leading-none tabular-nums tracking-normal text-foreground-faint">
+        —
       </div>
-      <div className="mt-3 flex h-1 gap-px overflow-hidden rounded-full bg-border-faint">
-        <span className="h-full bg-accent" style={{ width: '37.5%' }} />
-        <span className="h-full bg-foreground/15" style={{ width: '62.5%' }} />
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <PoolStat label="queue" value="14s" />
-        <PoolStat label="thru" value="6/h" />
-        <PoolStat label="err" value="0" />
-      </div>
-      <Tally className="mt-3" />
-      <p className="mt-3 text-[11.5px] text-foreground-subtle">
-        Capacity scales automatically when queue depth exceeds 8.
+      <p className="text-[11.5px] leading-normal text-foreground-subtle">
+        Worker pool telemetry (queue depth, throughput, error rate) is not wired
+        up yet. Will surface here once the worker exposes these metrics.
       </p>
-    </div>
-  );
-}
-
-function PoolStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="font-mono text-[13px] font-medium tabular-nums text-foreground">
-        {value}
-      </div>
-      <div className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.08em] text-foreground-subtle">
-        {label}
-      </div>
+      <Tally className="mt-1" />
     </div>
   );
 }

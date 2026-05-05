@@ -213,12 +213,14 @@ export function HitlBody({
       )}
 
       {isAwaiting && (
-        <Section label="Your decision">
+        <div className="mt-5">
+          {/* ReviewForm renders its own "Your decision" header internally;
+              wrapping in <Section> would duplicate the heading. */}
           <ReviewForm
             onSubmit={({ lane, feedback }) => onReview(lane, feedback)}
             disabled={reviewing}
           />
-        </Section>
+        </div>
       )}
     </div>
   );
