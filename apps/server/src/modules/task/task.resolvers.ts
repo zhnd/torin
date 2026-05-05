@@ -11,15 +11,18 @@ builder.queryField('task', (t) =>
   t.prismaField({
     type: 'Task',
     nullable: true,
+    authScopes: { authenticated: true },
     args: {
       id: t.arg.string({ required: true }),
     },
     resolve: (query, _parent, args, ctx) => {
-      const where: Record<string, unknown> = { id: args.id };
-      if (ctx.user) {
-        where.userId = ctx.user.id;
-      }
-      return ctx.prisma.task.findFirst({ ...query, where });
+      // ctx.user is guaranteed by authScopes; the userId clause is the
+      // ownership gate so a logged-in user can't read another user's
+      // task by guessing IDs.
+      return ctx.prisma.task.findFirst({
+        ...query,
+        where: { id: args.id, userId: ctx.user?.id },
+      });
     },
   })
 );
