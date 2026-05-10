@@ -69,6 +69,13 @@ export async function runAgent<T>(
   const model =
     input.queryOptions.model ?? process.env.AGENT_MODEL ?? 'claude-sonnet-4-6';
 
+  // Per-agent / global maxTurns override. Useful when running on a
+  // non-Claude gateway that takes more turns to navigate the same task.
+  // Precedence: AGENT_MAX_TURNS_<UPPER_SNAKE_NAME> > AGENT_MAX_TURNS >
+  // agent's built-in default in queryOptions.
+  const maxTurns =
+    resolveMaxTurnsOverride(input.agentName) ?? input.queryOptions.maxTurns;
+
   const observer =
     input.observer ?? createObserver(input.stage, input.agentName);
 
@@ -108,11 +115,16 @@ export async function runAgent<T>(
     : input.queryOptions.canUseTool;
 
   log.info(
-    { agent: input.agentName, model, hasSubmitTool: !!submit },
+    { agent: input.agentName, model, hasSubmitTool: !!submit, maxTurns },
     `${input.agentName} starting`
   );
 
+  // Toggle full SDK message tracing for local debugging via AGENT_TRACE_SDK=1.
+  // Off by default — prod logs would otherwise drown in tool_use payloads.
+  const traceSdk = process.env.AGENT_TRACE_SDK === '1';
+
   let lastResult: string | undefined;
+  let turn = 0;
 
   try {
     for await (const message of query({
@@ -124,8 +136,23 @@ export async function runAgent<T>(
         mcpServers,
         allowedTools,
         canUseTool,
+        maxTurns,
       },
     })) {
+      if (traceSdk) {
+        const m = message as Record<string, unknown>;
+        log.info(
+          {
+            agent: input.agentName,
+            turn,
+            type: m.type,
+            subtype: m.subtype,
+            sdkMessage: message,
+          },
+          `[sdk] ${String(m.type ?? 'unknown')}${m.subtype ? `:${String(m.subtype)}` : ''}`
+        );
+      }
+      turn += 1;
       observer.onMessage(message);
       if (
         (message as Record<string, unknown>).type === 'result' &&
@@ -186,4 +213,29 @@ export async function runAgent<T>(
       'Agent did not call submit_result tool AND final text could not be parsed. ' +
       'Check the agent prompt or model compatibility.'
   );
+}
+
+/**
+ * Look up a maxTurns override from the environment. Returns null when no
+ * relevant env var is set or the value isn't a positive integer (so the
+ * caller can fall back to the agent's compiled-in default cleanly).
+ *
+ * Precedence: per-agent (`AGENT_MAX_TURNS_<UPPER_SNAKE>`) beats global
+ * (`AGENT_MAX_TURNS`). Agent name `analyzeDefect` maps to env key
+ * `AGENT_MAX_TURNS_ANALYZE_DEFECT`.
+ */
+function resolveMaxTurnsOverride(agentName: string): number | null {
+  const upperSnake = agentName
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toUpperCase();
+  const candidates = [
+    process.env[`AGENT_MAX_TURNS_${upperSnake}`],
+    process.env.AGENT_MAX_TURNS,
+  ];
+  for (const raw of candidates) {
+    if (raw == null || raw === '') continue;
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
 }
