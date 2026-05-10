@@ -1,11 +1,6 @@
 'use client';
 
 import { GitBranch } from 'lucide-react';
-import {
-  DEFAULT_STAGES,
-  type StageStatus,
-  StageTrack,
-} from '@/components/common/stage-track';
 import { StatusChip } from '@/components/common/status-chip';
 import { Tally } from '@/components/common/tally';
 import { AppShell } from '@/components/layout/app-shell';
@@ -15,11 +10,11 @@ import { EventsView } from './components/events-view';
 import { FailurePanel } from './components/failure-panel';
 import { HeroStat } from './components/hero-stat';
 import { OverflowMenu } from './components/overflow-menu';
-import { StageBody } from './components/stage-body';
 import { TraceView } from './components/trace-view';
+import { AnalyzeRepositoryView } from './components/views/analyze-repository-view';
+import { ResolveDefectView } from './components/views/resolve-defect-view';
 import { VisualView } from './components/visual-view';
 import { formatTokens } from './libs';
-import type { StageKey } from './types';
 import { useService } from './use-service';
 
 interface TaskDetailProps {
@@ -144,39 +139,26 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
           <DetailTabsBar tab={tab} onChange={setTab} />
         </div>
 
-        {/* Body */}
-        {tab === 'overview' && (
-          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[244px_1fr]">
-            <div className="max-h-64 overflow-y-auto border-b border-border-faint bg-surface-cream/30 p-3 lg:max-h-none lg:border-r lg:border-b-0">
-              <div className="flex items-center gap-1.5 px-2.5 pb-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground-subtle">
-                <span className="inline-block h-1 w-1 rounded-full bg-foreground-faint" />
-                Pipeline
-              </div>
-              <StageTrack
-                stages={stages as Partial<Record<string, StageStatus>>}
-                currentStage={selectedStage}
-                onSelect={(k) => setSelectedStage(k as StageKey)}
-                list={DEFAULT_STAGES}
-                timings={timings}
-              />
-              <Tally className="mt-4" />
-            </div>
-
-            <div className="overflow-y-auto px-4 py-5 sm:px-6 lg:px-9 lg:py-7">
-              <div className="mx-auto max-w-220 pb-12">
-                <StageBody
-                  stage={selectedStage}
-                  status={stages[selectedStage]}
-                  stageData={stageData}
-                  detail={detail}
-                  onReview={submitReview}
-                  reviewing={reviewing}
-                  hitlWaited={hitlWaited}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Body — overview is per-task-type; visual/events/trace are shared */}
+        {tab === 'overview' &&
+          (detail.task.workflow === 'ANALYZE_REPOSITORY' ? (
+            <AnalyzeRepositoryView
+              detail={detail}
+              analyzeStage={stageData.analyze}
+            />
+          ) : (
+            <ResolveDefectView
+              detail={detail}
+              stages={stages}
+              stageData={stageData}
+              selectedStage={selectedStage}
+              setSelectedStage={setSelectedStage}
+              timings={timings}
+              submitReview={submitReview}
+              reviewing={reviewing}
+              hitlWaited={hitlWaited}
+            />
+          ))}
 
         {tab === 'visual' && (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-10 lg:py-6">
