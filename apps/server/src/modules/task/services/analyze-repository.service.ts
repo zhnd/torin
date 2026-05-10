@@ -46,7 +46,13 @@ export class AnalyzeRepositoryService {
       const handle = await client.workflow.start('analyzeRepositoryWorkflow', {
         taskQueue: TASK_QUEUE,
         workflowId: `analyze-${task.id}`,
-        args: [{ taskId: task.id, repositoryUrl: project.repositoryUrl }],
+        args: [
+          {
+            taskId: task.id,
+            projectId: project.id,
+            repositoryUrl: project.repositoryUrl,
+          },
+        ],
       });
       workflowId = handle.workflowId;
     } catch (err) {

@@ -139,7 +139,13 @@ export class RetryTaskService {
       return client.workflow.start('analyzeRepositoryWorkflow', {
         taskQueue: TASK_QUEUE,
         workflowId: `analyze-${newTaskId}`,
-        args: [{ taskId: newTaskId, repositoryUrl: project.repositoryUrl }],
+        args: [
+          {
+            taskId: newTaskId,
+            projectId: project.id,
+            repositoryUrl: project.repositoryUrl,
+          },
+        ],
       });
     }
     throw new AppError(`Unsupported task type: ${type}`, 'INVALID_STATE', 400);

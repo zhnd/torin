@@ -6,6 +6,7 @@ import type {
 
 export interface AnalyzeRepositoryInput {
   taskId: string;
+  projectId: string;
   repositoryUrl: string;
 }
 

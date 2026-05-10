@@ -27,7 +27,8 @@ export async function analyzeRepositoryWorkflow(
   let sandboxState: SandboxState | undefined;
   try {
     sandboxState = await sandboxInfra.createSandboxActivity(
-      input.repositoryUrl
+      input.repositoryUrl,
+      { projectId: input.projectId }
     );
 
     const ctx: PhaseContext = { taskId: input.taskId, sandboxState };
