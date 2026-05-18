@@ -1,4 +1,5 @@
 import type {
+  AnalysisResult,
   CriticReview,
   DefectAnalysis,
   ReproductionOracle,
@@ -70,10 +71,12 @@ export function buildFilterChecksRecord(
 
 export function buildAnalyzeStageInput(args: {
   defectDescription: string;
+  repoNavigation: AnalysisResult | undefined;
   feedback: string | undefined;
 }): unknown {
   return {
     defectDescription: args.defectDescription,
+    repoNavigation: args.repoNavigation,
     feedback: args.feedback,
   };
 }

@@ -1,3 +1,4 @@
+import type { AnalysisResult, DefectIntent } from '@torin/domain';
 import dedent from 'dedent';
 
 export const ANALYZE_DEFECT_SYSTEM_PROMPT = dedent`
@@ -19,77 +20,148 @@ export const ANALYZE_DEFECT_SYSTEM_PROMPT = dedent`
   The shell's working directory is already the repo root; do NOT 'cd' to
   any absolute path.
 
-  Your job: understand the defect, identify root cause, and prepare the
-  workflow to execute a safe, targeted fix. Downstream phases enforce your
-  declarations mechanically, so be precise.
+  ## Inputs you will receive
+  The user prompt provides, in this order:
+    1. A pre-extracted DefectIntent (structured). Use its
+       searchHypotheses as your FIRST-TURN AGENDA. Do not redo intent
+       extraction — it's done. Treat keyTerms (including Chinese
+       originals) as literal grep targets.
+    2. (Optional) A Repo Navigation Map — high-signal tech stack /
+       structure / patterns from a prior analyze-repository pass.
+       Treat as a HINT, not ground truth. If list_files / read_file
+       disagrees with the map, trust the sandbox.
+    3. The raw defect description (for context).
+    4. (Optional) Reviewer feedback from a previously rejected analysis.
 
-  Steps:
-  1. Explore repo structure (package.json / Cargo.toml / pyproject.toml / go.mod)
-  2. Detect test infrastructure and web UI framework (see required fields)
-  3. Read the code relevant to the defect
-  4. Trace the issue to a concrete root cause
-  5. Decide exactly which files must change
-  6. Classify risk class using the strict criteria below
-  7. Produce verification steps for a human reviewer (especially if no
-     automated oracle will be possible)
+  Your job: confirm root cause, declare scope and risk, and surface
+  enough alternatives that a HITL reviewer can sanity-check your work.
+  Downstream phases enforce your declarations mechanically, so be precise.
 
-  IMPORTANT: When you have completed your analysis, call the submit_result
-  tool with your findings. The tool enforces the exact schema — if your input
-  is invalid you will see the specific validation error and must fix and retry.
-  Do NOT output a raw JSON object in your text response.
+  ## Workflow
+  1. Execute the DefectIntent.searchHypotheses queries to confirm or
+     refute each. Skip already-disproven hypotheses early.
+  2. Read the most promising hits in full; trace symptom → cause.
+  3. Produce 1-3 candidate root causes ranked by evidence; designate
+     the strongest as the top-level rootCause.
+  4. Enumerate 1-3 DISTINCT fix strategies (see strategy rules).
+  5. Decide canonical scope, riskClass, and verification steps.
+  6. Call submit_result.
 
-  Required-field rules:
+  ## Output rules
 
-  hasTestInfra / testFrameworks:
-    true iff any of: package.json scripts.test, jest/vitest/playwright config,
-    pytest.ini, tox.ini, pyproject.toml with [tool.pytest], Cargo [[test]],
-    *_test.go files. List each detected framework.
+  rootCause + candidateRootCauses
+    candidateRootCauses (optional, but emit when possible) is 1-3
+    ranked alternatives, each {rootCause, confidence: high|medium|low,
+    evidence[]}. Mirror the top candidate's rootCause string to the
+    top-level rootCause field for downstream code that doesn't yet
+    read the array. When you're highly confident in one cause, a single
+    candidate is fine — don't pad.
 
-  hasWebUI / webFramework / devServerCommand:
-    Set hasWebUI=true if repo has next / vite / @sveltejs/kit / astro / remix
-    / vue / @angular/* as a runtime dep, OR has .tsx/.vue/.svelte source
-    files outside Storybook. Infer webFramework from deps. Set
+  consideredStrategies (optional, but emit when possible)
+    1-3 QUALITATIVELY DIFFERENT fix approaches — avoid mode collapse:
+    don't list three variants of the same edit. Pick from distinct
+    axes, e.g.:
+      - fix at the bug site itself
+      - guard / validate at the upstream caller
+      - fall back / tolerate at the downstream consumer
+      - revert the offending commit
+      - hide behind a feature flag
+    Each: {
+      approach: short description,
+      scopeFiles: files this strategy would touch,
+      tradeoffs: pros + cons in 1-3 sentences,
+      riskClass: trivial | low | medium | high,
+      recommendation: 'recommended' | 'viable' | 'rejected',
+      expectedFailureMode (optional): how this strategy could fail
+    }.
+    EXACTLY ONE entry should be marked 'recommended'; downstream
+    implement uses that one. Others remain on file as fallbacks.
+    The recommended strategy's scopeFiles SHOULD match the top-level
+    scopeDeclaration.
+
+  hasTestInfra / testFrameworks
+    true iff any of: package.json scripts.test, jest/vitest/playwright
+    config, pytest.ini, tox.ini, pyproject.toml with [tool.pytest],
+    Cargo [[test]], *_test.go files. List each detected framework.
+
+  hasWebUI / webFramework / devServerCommand
+    Set hasWebUI=true if repo has next / vite / @sveltejs/kit / astro /
+    remix / vue / @angular/* as a runtime dep, OR has .tsx/.vue/.svelte
+    source files outside Storybook. Infer webFramework from deps. Set
     devServerCommand from package.json scripts.dev (or equivalent).
-    Use null for all three on non-web repos.
+    Omit all three on non-web repos.
 
   riskClass — strict:
-    - "trivial" — requires ALL of these:
-        * affectedFiles limited to: .md, .txt, comment-only changes, i18n
-          dictionaries, or pure string literal constants
+    - "trivial" — requires ALL of:
+        * affectedFiles limited to: .md, .txt, comment-only changes,
+          i18n dictionaries, or pure string literal constants
         * proposedApproach contains NO words: logic, algorithm, behavior,
           condition, branch
         * no test files modified
         * expected total diff < 50 lines
     - "low" — isolated single-point fix, one or two files, no cross-module
     - "medium" — multi-file business logic change
-    - "high" — touches core module, data model, public API, auth/permissions,
-      concurrency-sensitive code, or migration-generating files
+    - "high" — touches core module, data model, public API,
+      auth/permissions, concurrency-sensitive code, or
+      migration-generating files
     When uncertain, escalate up (low→medium, medium→high).
 
-  scopeDeclaration:
-    The canonical list of files allowed to change. The workflow rejects
-    implementations that touch files outside this list. Be precise — full
-    paths, not globs. Err on the side of fewer files; if the implement
-    phase discovers it truly needs another file, the workflow will
-    escalate back to you.
+  scopeDeclaration
+    Canonical list of files allowed to change. The workflow rejects
+    implementations that touch files outside this list. Full paths,
+    not globs. Should match the recommended strategy's scopeFiles.
+    Err on the side of fewer files; if implement truly needs another
+    file the workflow will escalate back to you.
 
-  verificationSteps:
-    For each fix, spell out concrete steps a human reviewer should take to
-    confirm the fix works, especially when no automated oracle exists.
-    If hasWebUI, phrase as user actions on a preview URL.
+  verificationSteps
+    Concrete steps a human reviewer should take to confirm the fix
+    works, especially when no automated oracle exists. If hasWebUI,
+    phrase as user actions on a preview URL.
+
+  ## Final reminder
+  Call submit_result when complete. The tool enforces the exact schema —
+  validation errors come back as tool_result and you must fix and retry.
+  Do NOT output a raw JSON object in your text response.
 `;
 
 export function buildAnalyzeDefectUserPrompt(
   defectDescription: string,
+  intent: DefectIntent | undefined,
+  repoNavigation: AnalysisResult | undefined,
   feedback?: string
 ): string {
+  const intentSection = intent
+    ? dedent`
+
+      ## DefectIntent (pre-extracted — your first-turn agenda)
+      \`\`\`json
+      ${JSON.stringify(intent, null, 2)}
+      \`\`\`
+
+      Run searchHypotheses queries FIRST. Treat Chinese keyTerm
+      originals as literal grep strings.
+    `
+    : '';
+
+  const repoMapSection = repoNavigation
+    ? dedent`
+
+      ## Repo Navigation Map (hint from prior analyze-repository — not ground truth)
+      Summary: ${repoNavigation.summary}
+      Tech stack: ${repoNavigation.techStack.join(', ')}
+      Patterns: ${repoNavigation.patterns.join('; ')}
+      Structure:
+      ${repoNavigation.structure}
+    `
+    : '';
+
   const feedbackSection = feedback
     ? dedent`
 
-      Previous analysis was rejected. Reviewer feedback:
+      ## Reviewer feedback (previous analysis was rejected)
       ${feedback}
 
-      Please re-analyze taking this feedback into account.
+      Take this into account.
     `
     : '';
 
@@ -97,8 +169,10 @@ export function buildAnalyzeDefectUserPrompt(
     Analyze this defect:
 
     ${defectDescription}
+    ${intentSection}
+    ${repoMapSection}
     ${feedbackSection}
 
-    After exploring, call the submit_result tool with your findings.
+    After exploring, call submit_result with your findings.
   `;
 }

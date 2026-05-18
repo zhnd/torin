@@ -1,5 +1,9 @@
 import { analyzeDefect } from '@torin/agent';
-import type { DefectAnalysis } from '@torin/domain';
+import type {
+  AnalysisResult,
+  DefectAnalysis,
+  DefectIntent,
+} from '@torin/domain';
 import { connectSandbox, type SandboxState } from '@torin/sandbox';
 import { log } from '../logger.js';
 import {
@@ -10,20 +14,39 @@ import {
 export async function analyzeDefectActivity(
   state: SandboxState,
   defectDescription: string,
+  intent: DefectIntent | undefined,
+  repoNavigation: AnalysisResult | undefined,
   feedback?: string
 ): Promise<AgentActivityResult<DefectAnalysis>> {
-  log.info({ hasFeedback: !!feedback }, 'Starting defect analysis activity');
+  log.info(
+    {
+      hasIntent: !!intent,
+      hasRepoMap: !!repoNavigation,
+      hasFeedback: !!feedback,
+    },
+    'Starting defect analysis activity'
+  );
   const sandbox = await connectSandbox(state);
   const out = await runAgentInActivity(
     'analysis',
     'analyzeDefect',
-    (observer) => analyzeDefect(sandbox, defectDescription, feedback, observer)
+    (observer) =>
+      analyzeDefect(
+        sandbox,
+        defectDescription,
+        intent,
+        repoNavigation,
+        feedback,
+        observer
+      )
   );
   if (out.result) {
     log.info(
       {
         rootCause: out.result.rootCause.slice(0, 100),
         eventCount: out.observation.events.length,
+        candidates: out.result.candidateRootCauses?.length ?? 0,
+        strategies: out.result.consideredStrategies?.length ?? 0,
       },
       'Defect analysis complete'
     );

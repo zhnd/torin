@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Torin Defect 分析阶段重构 — 文献与开源调研学习文档</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --bg: #fafaf7;
+    --card: #ffffff;
+    --border: #e4e2dc;
+    --accent: #b34a2a;
+    --accent-soft: #fbe9e1;
+    --link: #2563eb;
+    --code-bg: #f3f1ec;
+    --good: #157f3c;
+    --good-soft: #e1f5e8;
+    --bad: #a3261a;
+    --bad-soft: #fbe2de;
+    --warn: #8a6500;
+    --warn-soft: #fdf3cd;
+  }
+  html { font-size: 16px; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.7;
+    margin: 0;
+    padding: 0;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 48px 32px 96px; }
+  header.hero {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 36px;
+  }
+  header.hero h1 { font-size: 1.95rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  header.hero .sub { color: var(--muted); font-size: 0.95rem; }
+  h2 { font-size: 1.4rem; margin: 56px 0 14px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1.12rem; margin: 32px 0 10px; }
+  h4 { font-size: 1.0rem; margin: 22px 0 8px; color: var(--accent); }
+  p { margin: 10px 0; }
+  a { color: var(--link); text-decoration: none; border-bottom: 1px dotted var(--link); }
+  a:hover { background: #eef4ff; }
+  code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.5;
+    margin: 14px 0;
+  }
+  pre code { background: none; padding: 0; }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 14px 0;
+    padding: 6px 16px;
+    color: #333;
+    background: var(--accent-soft);
+    border-radius: 0 6px 6px 0;
+  }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.94em;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    vertical-align: top;
+    text-align: left;
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 24px;
+    margin-bottom: 40px;
+  }
+  .toc h3 { margin: 0 0 10px; font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .toc ol { margin: 0; padding-left: 20px; }
+  .toc li { margin: 4px 0; }
+  .toc a { border-bottom: none; }
+  .toc a:hover { text-decoration: underline; }
+  .callout {
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 18px 0;
+    border: 1px solid;
+  }
+  .callout.good { background: var(--good-soft); border-color: #b9e2c8; }
+  .callout.bad  { background: var(--bad-soft);  border-color: #efc1bb; }
+  .callout.warn { background: var(--warn-soft); border-color: #ecdb8e; }
+  .callout.info { background: #eef2fb; border-color: #c7d3ec; }
+  .callout strong:first-child { display: block; margin-bottom: 4px; }
+  .badge {
+    display: inline-block;
+    font-size: 0.72em;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-right: 6px;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .b-good { background: var(--good-soft); color: var(--good); }
+  .b-bad  { background: var(--bad-soft);  color: var(--bad); }
+  .b-warn { background: var(--warn-soft); color: var(--warn); }
+  .b-info { background: #e3eaf7; color: #1d4ed8; }
+  .cite { color: var(--muted); font-size: 0.86em; }
+  .cite a { border-bottom: none; }
+  .footnote {
+    color: var(--muted);
+    font-size: 0.86em;
+    border-top: 1px dashed var(--border);
+    padding-top: 12px;
+    margin-top: 16px;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) {
+    .grid2 { grid-template-columns: 1fr; }
+    .wrap { padding: 24px 18px 64px; }
+  }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .ref-list dt { font-weight: 600; margin-top: 12px; }
+  .ref-list dd { margin: 4px 0 0 0; padding-left: 12px; color: #333; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Torin Defect 分析阶段重构</h1>
+  <div class="sub">基于 2025–2026 论文与生产开源系统的调研学习文档 · 用于决策前的知识对齐</div>
+</header>
+
+<div class="toc">
+  <h3>目录</h3>
+  <ol>
+    <li><a href="#intro">导读：我们要解决什么</a></li>
+    <li><a href="#tldr">TL;DR — 五条结论</a></li>
+    <li><a href="#bg">背景知识（SWE-bench / Agent loop / Fault localization）</a></li>
+    <li><a href="#evi-intent">证据 1 — Intent 前置真的有用吗</a></li>
+    <li><a href="#evi-repomap">证据 2 — Repo Map / 仓库导航图</a></li>
+    <li><a href="#evi-reproducer">证据 3 — Reproducer-first 的位置之争</a></li>
+    <li><a href="#evi-test">证据 4 — 测试是唯一可靠的 patch 选择信号</a></li>
+    <li><a href="#evi-rex">证据 5 — 探索 vs 利用：REx 的 bandit 视角</a></li>
+    <li><a href="#anti">反向证据：哪些招要警惕</a></li>
+    <li><a href="#cn">中文 tapd 场景的特定考虑</a></li>
+    <li><a href="#r2">修订方案 R2 逐段解读</a></li>
+    <li><a href="#refs">完整参考文献</a></li>
+    <li><a href="#glossary">术语表</a></li>
+  </ol>
+</div>
+
+<!-- =============================== INTRO =============================== -->
+<section id="intro">
+<h2>1. 导读：我们要解决什么</h2>
+
+<p>Torin 当前的 <code>analyze-defect</code> agent（<code>packages/agent/src/agents/analyze-defect/</code>）在 20 个 turn 内同时承担六件事：</p>
+
+<ol>
+  <li>理解 defect 的<strong>意图</strong>（用户在抱怨什么）</li>
+  <li>探索<strong>仓库结构</strong>（什么技术栈、什么目录约定）</li>
+  <li>定位<strong>根因</strong>（具体是哪个函数 / 哪行代码）</li>
+  <li>设计<strong>修复方案</strong>（怎么改）</li>
+  <li>给出<strong>风险与范围</strong>（riskClass + scopeDeclaration）</li>
+  <li>产出<strong>验证步骤</strong>（HITL reviewer 用什么 checklist）</li>
+</ol>
+
+<p>问题场景：tapd 中文 defect description 通常只有 2–5 句话，缺 expected/actual、缺复现步骤、缺涉及组件。在大型 monorepo 上，agent 没有<em>起点</em>，盲探目录，turn budget 耗光后强行 <code>submit_result</code>。结果：</p>
+
+<ul>
+  <li><code>rootCause</code> 含糊（"可能与 XX 模块有关"）</li>
+  <li><code>scopeDeclaration</code> 偏宽（把整个目录列上）或偏错（漏掉真正要改的文件）</li>
+  <li>下游 implement / filter / critic 拿到劣质输入，错误被放大</li>
+</ul>
+
+<p>本次调研的核心问题：</p>
+
+<blockquote>
+  <strong>问</strong>：在 LLM-agent 做 SWE 任务这条路线上，<em>2025–2026 年的论文与生产系统</em>对"大仓上从短描述到准确 fix"这件事有什么经过验证的招？哪些是噪音、哪些是真信号？
+</blockquote>
+
+<p>我并行派了三个研究 agent，分别覆盖：(a) SOTA 大仓 fault localization、(b) bug report → intent extraction、(c) 多候选 fix 探索与选择。本文档把三份报告的发现拆解后，按"逐条论据 + 引用论文 + 对我们的启示"重新组织。</p>
+
+<div class="callout info">
+<strong>阅读建议</strong>
+直接看 <a href="#tldr">TL;DR</a> 再翻"证据"各节深入。每节末尾有"对我们的启示"小段，把抽象论文映射到 Torin 当前代码。
+</div>
+</section>
+
+<!-- =============================== TLDR =============================== -->
+<section id="tldr">
+<h2>2. TL;DR — 五条结论</h2>
+
+<ol>
+  <li><span class="badge b-good">采纳</span><strong>结构化 intent 前置</strong>有效，但必须产出<em>可执行约束</em>（grep queries / reproducer hypothesis / 成功判据），而不是文字总结。证据：SpecRover、AEGIS、CodeR、Google 的 decomposition 论文。</li>
+  <li><span class="badge b-good">采纳</span><strong>仓库导航图</strong>（repo map）作为分析 agent 的缓存前缀。最佳形态：Tree-sitter + PageRank（Aider 风格），1–2k tokens，prompt cache 命中。证据：LocAgent、Aider、Trae CKG、LingmaAgent。</li>
+  <li><span class="badge b-bad">放弃</span>之前提的"三个独立 sandbox agent 串联"方案，<strong>合并为 1 个 text-only intent agent + 1 个升级版 analyze agent</strong>。理由：Cognition 的 "Don't Build Multi-Agents" 警告 + multi-agent 总结式 handoff 的 telephone game。</li>
+  <li><span class="badge b-bad">放弃</span><strong>"枚举 N 个 diff 让 LLM 挑"</strong>。LLM 在 diff 层会 mode collapse（Verbalized Sampling 量化证明），LLM-as-judge 在相似候选间不稳定（AXIOM）。要选择就用 sandbox 跑回归 + 复现测试。</li>
+  <li><span class="badge b-warn">观察</span>中文 tapd defect 是<strong>真空地带</strong>——没有论文专门覆盖。可移植实践：双语 key term 保留、项目术语表注入、显式 <code>unknowns</code> 字段防幻觉。</li>
+</ol>
+</section>
+
+<!-- =============================== BG =============================== -->
+<section id="bg">
+<h2>3. 背景知识（如果你已经熟悉可跳过）</h2>
+
+<h3>3.1 SWE-bench / SWE-bench Verified</h3>
+<p>由 Princeton + Anthropic 合作整理的、来自 12 个真实 Python 项目的 2 294 个 GitHub Issue → Pull Request 配对。SWE-agent 给定 issue 文本，要求 agent 在仓库上自己定位 + 改代码 + 让真实测试通过。<strong>Verified</strong> 是 OpenAI 与 Princeton 人工筛过的 500 题子集（去掉了原数据集中题目模糊或测试错误的样本），现在事实上是 SOTA 比较的标准基准。<a href="https://www.swebench.com/verified.html">Verified leaderboard</a></p>
+
+<p>关键之处：题目原文是英文 GitHub Issue（通常已经包含 expected/actual + 复现脚本），仓库是中等规模 Python 库。<strong>tapd 中文短 defect + 大型多语种 monorepo 比 SWE-bench 难一个数量级。</strong></p>
+
+<h3>3.2 Fault localization（FL）三种主要范式</h3>
+<table>
+<tr><th>范式</th><th>代表</th><th>对 LLM agent 的契合度</th></tr>
+<tr><td>SBFL（Spectrum-Based）</td><td>Ochiai / Tarantula，用测试通过/失败的覆盖差异打分</td><td>需要先有失败测试，对短描述 defect 不直接适用</td></tr>
+<tr><td>IRBFL（IR-Based）</td><td>BLUiR、BugLocator，把 bug 文本和源码做 IR 匹配（BM25 / embedding）</td><td>BM25 alone 在 SWE-bench Verified 上 floor 在 1.96%</td></tr>
+<tr><td>Agent-based</td><td>SWE-agent、Agentless、AutoCodeRover、LocAgent</td><td>当前 SOTA 全在这条路线上</td></tr>
+</table>
+
+<h3>3.3 几个关键术语</h3>
+<dl>
+  <dt>Pass@1 / Pass@N</dt>
+  <dd>SWE-bench 评估指标：单次提交解决 / N 次提交里至少一次解决的比例。</dd>
+  <dt>Best-of-N</dt>
+  <dd>同一题跑 N 次，挑一个最好的提交。提升来自 N 次结果的"上限"被某种 selector 取到。</dd>
+  <dt>Telephone game（电话游戏）</dt>
+  <dd>多 agent 之间通过总结字符串传递信息，每一次"压缩 → 解压"都丢细节，类似真实电话游戏。<a href="https://cognition.ai/blog/dont-build-multi-agents">Cognition 用它形容多 agent 系统的失败模式</a>。</dd>
+  <dt>Prompt cache（Anthropic 5 分钟 cache）</dt>
+  <dd>固定前缀走 cache 后输入 token 单价降 90%。设计上凡是"每次都重发的大段内容"（比如 repo map）应当尽量做成固定前缀。</dd>
+  <dt>Mode collapse</dt>
+  <dd>后训练 LLM 在采样时倾向给出几乎相同的答案，即使温度调高、要求多样化。Zhang et al. 2025 <a href="https://arxiv.org/abs/2510.01171">Verbalized Sampling</a> 给了量化测量。</dd>
+</dl>
+</section>
+
+<!-- =============================== EVIDENCE 1 =============================== -->
+<section id="evi-intent">
+<h2>4. 证据 1 — Intent 前置真的有用吗？</h2>
+
+<p>核心问题：在让 agent 跑代码之前，单独跑一段 "理解 bug 文本" 的步骤，有没有提升下游 fix 成功率？</p>
+
+<h3>4.1 SpecRover（ICSE 2025）— 最直接的对照实验</h3>
+
+<p>SpecRover 是 AutoCodeRover 的升级版，作者团队相同（NUS Abhik 教授组）。流水线五个 agent：</p>
+
+<pre><code>Reproducer  →  Context Retrieval  →  Patching  →  Reviewer  →  Selection</code></pre>
+
+<p>关键差别：Context Retrieval 阶段除了输出 "改哪一行"，还输出每个候选位置的 <strong>natural-language specification</strong>（即"这段代码本来应该满足什么不变量"）。下游 Patching agent 收到的不是单纯的位置列表 <code>[loc_1, loc_2, ...]</code>，而是 <code>[(loc_1, spec_1), (loc_2, spec_2), ...]</code>。Reviewer 在多个候选 patch 之间选择时，用 <em>原 issue 文本 + 推断的 spec</em> 作为对照，覆盖"测试通过但 spec 错"的 patch。</p>
+
+<p>对比数字：在 SWE-Bench Verified 上 +50%（pass@1 从 ~30% → ~46.2%），单 issue 成本反而降到 $0.65（vs AutoCodeRover ~$0.50–0.90 但成功率低）。<a href="https://arxiv.org/abs/2408.02232">arxiv:2408.02232</a> / <a href="https://abhikrc.com/pdf/ICSE25.pdf">ICSE'25 PDF</a></p>
+
+<blockquote>
+"Issues often contain richer information than tests alone... A spec derived from the issue can override misleading test signals."
+<div class="cite">— SpecRover §3.2</div>
+</blockquote>
+
+<h4>对我们的启示</h4>
+<p>SpecRover 把"intent"做成<strong>下游每个步骤都能引用的 artifact</strong>，而不是 "intent agent 跑完就丢了"。这是我们 R2 方案里 intent 前置的核心理由：intent 不是中间消费品，是固定贯穿整条 pipeline 的约束。</p>
+
+<h3>4.2 AEGIS（FSE 2025）— Ablation 直接证明"约束作用"</h3>
+
+<p>AEGIS（"Augmenting bug reports with Expected behaviors using GenAI for Improved fault localization Statistics"）做了一个非常干净的对照：</p>
+
+<table>
+<tr><th>条件</th><th>MAP@10 提升</th></tr>
+<tr><td>原始 bug report（baseline）</td><td>—</td></tr>
+<tr><td>+ LLM 生成的 summary 作为<em>额外文本</em>注入</td><td>+4.3 pp</td></tr>
+<tr><td>+ summary 作为下游 IR ranker 的<em>显式 query 约束</em></td><td>+23.7 pp</td></tr>
+</table>
+
+<p>解读：差异不在"有没有 summary"，而在 summary <strong>怎么被使用</strong>。把它当文本拼进去，得 4.3 pp；把它解析出关键词 → 作为 IR ranker 的硬约束，得 23.7 pp。<a href="https://arxiv.org/html/2504.18804v1">arxiv html</a></p>
+
+<h4>对我们的启示</h4>
+<p>这是我们坚持 intent agent 必须输出<code>searchHypotheses: [{ hypothesis, queries }]</code>（具体可执行的 grep / glob 查询）而不是 prose 的核心理由。如果只产 summary，价值大概只有 4 pp 级别。</p>
+
+<h3>4.3 CodeR（Lin et al. 2024）— Pre-planning vs Reactive</h3>
+
+<p>CodeR 是多 agent 系统，包含 Manager / Reproducer / Fault Localizer / Editor / Verifier。和其他多 agent 系统的差异在于：<strong>有一个固定的 task graph 提前规划好</strong>，agent 按图执行而不是自主决策"下一步做什么"。</p>
+
+<p>核心 ablation：固定 task graph vs 自主决策 → +11.3 pp（在 SWE-bench Lite 上 19% → 30%+）。<a href="https://arxiv.org/abs/2406.01304">arxiv:2406.01304</a></p>
+
+<blockquote>
+"Reactive agents waste turns deliberating control flow that's already determined by the task structure."
+<div class="cite">— CodeR §4</div>
+</blockquote>
+
+<h4>对我们的启示</h4>
+<p>Torin 已经用 Temporal workflow 做了 pre-planning（每个 stage 是固定的），这条路线已经走对了。继续在 stage 内部细化 pre-planning（intent → repo map → analyze）符合 CodeR 的发现。</p>
+
+<h3>4.4 Google "Small Models, Big Results" — Intent Extraction by Decomposition</h3>
+
+<p>Google Research 2025 的一篇博客，做的是 NLU 领域的 intent extraction（不是 SWE，但 idea 通用）。核心发现：与其用一个大模型一步到位提取 intent，不如<strong>把任务拆成多个小步骤、每步用小模型</strong>——成本降一个数量级、准确率不降甚至提升。<a href="https://research.google/blog/small-models-big-results-achieving-superior-intent-extraction-through-decomposition/">research.google</a></p>
+
+<h4>对我们的启示</h4>
+<p>这是我们让 intent agent 用更便宜模型（Haiku 级别）的论据。Intent 阶段是文本→结构化，complexity 不需要 Opus 4.7。当前 Torin <code>runAgent</code> 只读全局 <code>AGENT_MODEL</code>，加 per-agent override 是低成本改造。</p>
+
+<h3>4.5 IQLoc — 结构化 keyword 抽取的"硬"实验</h3>
+
+<p>较老的工作（2022），但 ablation 干净：从 bug report 抽取关键词作为 IR query 后 MAP +60%。<a href="https://arxiv.org/abs/2204.09655">arxiv:2204.09655</a></p>
+
+<h3>4.6 综合：Intent 前置该做成什么样？</h3>
+
+<div class="callout good">
+<strong>这些证据综合起来告诉我们的"应当"：</strong>
+<ol>
+  <li><strong>Intent agent 输出可执行约束</strong>：search queries（直接 grep）+ reproducer hypothesis（可写成 stub）+ 成功判据（用户认为修好的判据）+ unknowns（不知道什么）。<em>不要是 prose summary</em>。</li>
+  <li><strong>Intent 是下游每一步都能引用的固定 artifact</strong>，注入到 analyze、reproduce、implement、critic 的 prompt 里都该有它（SpecRover 模式）。</li>
+  <li><strong>Intent 步骤本身是一次轻量 LLM 调用，不是 agent loop</strong>。无需 sandbox 工具，~6 turns。可以用便宜模型。</li>
+  <li><strong>必须有 <code>unknowns</code> 显式通道</strong>，避免 LLM 在缺字段时幻觉补全（见 <a href="#anti">反向证据</a> 中 CTQRS 部分）。</li>
+</ol>
+</div>
+
+</section>
+
+<!-- =============================== EVIDENCE 2 =============================== -->
+<section id="evi-repomap">
+<h2>5. 证据 2 — Repo Map / 仓库导航图</h2>
+
+<p>核心问题：大仓上 agent 没有起点。怎么给它一张"地图"？</p>
+
+<h3>5.1 LocAgent（ACL 2025）— 把仓库变成图，让 agent 走图</h3>
+
+<p>LocAgent 把仓库构造成一个 <strong>directed heterogeneous graph</strong>：</p>
+
+<ul>
+  <li><strong>节点</strong>：目录、文件、类、函数</li>
+  <li><strong>边</strong>：contain（结构）、import（依赖）、invoke（调用）、inherit（继承）</li>
+</ul>
+
+<p>暴露给 agent 三个工具：</p>
+<ol>
+  <li><code>SearchEntity(query)</code>：BM25 检索，返回三层粒度（fold = 只名字 / preview = 签名+docstring / full = 完整代码）</li>
+  <li><code>TraverseGraph(start, edge_type, hops)</code>：类型感知的 BFS（"找所有调用 foo 的函数，2 跳内"）</li>
+  <li><code>RetrieveEntity(id)</code>：获取实体详情</li>
+</ol>
+
+<p>结果（SWE-Bench Lite）：</p>
+<table>
+<tr><th>指标</th><th>LocAgent (Qwen-2.5-32B 微调)</th><th>对比</th></tr>
+<tr><td>file-Acc@5</td><td>92.7%</td><td>BM25-only ≈ 60%</td></tr>
+<tr><td>function-Acc@10</td><td>77%</td><td>SWE-agent (GPT-4) ~ 50%</td></tr>
+<tr><td>成本</td><td>$0.05 / issue</td><td>SWE-agent ~$0.30</td></tr>
+</table>
+
+<p>更重要的是 <strong>ablation</strong>：单独砍掉 invoke / import / inherit 边，function-level accuracy 大幅崩塌。<em>结构边</em>才是多 hop 多回报的关键。<a href="https://arxiv.org/abs/2503.09089">arxiv:2503.09089</a> / <a href="https://github.com/gersteinlab/LocAgent">github</a></p>
+
+<h4>对我们的启示</h4>
+<p>完整的 LocAgent 实现需要 tree-sitter + 自建图存储 + 自建查询工具，工程量大。但它的 <strong>核心 insight 适用</strong>：仅仅把仓库平铺给 agent grep，不如先建结构。我们短期 R2 用更轻量的 Aider repo map（见 5.2），中长期可考虑 LocAgent 形态。</p>
+
+<h3>5.2 Aider Repo Map — 实用、轻量、已开源</h3>
+
+<p>Aider 的 <a href="https://aider.chat/2023/10/22/repomap.html">repo map</a>（2023 年首发，至今仍在迭代）做法：</p>
+
+<ol>
+  <li>用 Tree-sitter 解析每个源文件，提取 definitions（class、function、method）和 references（调用关系）。Aider 内置 <code>tags.scm</code> 覆盖 ~20 种语言。</li>
+  <li>每个文件作为图节点，definitions/references 构成边。</li>
+  <li>跑 <strong>PageRank</strong>：被引用越多的符号权重越高（"中心节点"）。</li>
+  <li>按权重选 top-N 符号，渲染成简洁文本：
+    <pre><code>src/cart.ts:
+│class ShoppingCart:
+│    def add_item(item: Item) -&gt; None
+│    def remove_item(item_id: str) -&gt; None
+⋮
+src/checkout.ts:
+│def process_payment(cart: ShoppingCart) -&gt; PaymentResult</code></pre>
+  </li>
+  <li>默认 1 024 tokens 预算，可调。</li>
+</ol>
+
+<p>关键设计：<strong>map 是 chat 的固定前缀</strong>，每次对话开头同样的 map，吃 prompt cache。这是 Aider 在长会话里保持便宜的核心机制之一。</p>
+
+<h4>对我们的启示</h4>
+<p>Torin 已有 <code>analyze-repository</code> agent 跑过一次产出仓库结构性 <code>AnalysisResult</code>。短期可以：</p>
+<ul>
+  <li>R2 第一步：直接拿 <code>AnalysisResult</code> 里 techStack / 关键目录 / patterns 作为 navigation hint（~500 tokens）。</li>
+  <li>R2 第二步（可选）：让 <code>analyze-repository</code> 额外跑 tree-sitter + PageRank 产出 Aider 风格的 repo map，作为 <code>AnalysisResult</code> 的新字段。</li>
+</ul>
+<p>无需向量库、无需图数据库，纯文本，~2k tokens，走 prompt cache。</p>
+
+<h3>5.3 Bytedance Trae Agent（2025）— 生产系统验证</h3>
+
+<p>Trae（即 MarsCode 的延续）暴露给 agent 的工具：</p>
+<ul>
+  <li><code>str_replace_editor</code> + <code>bash</code>（基础读写）</li>
+  <li><code>ckg_tools</code>：Code Knowledge Graph，包含 <code>search_class(name)</code> / <code>search_function(name)</code></li>
+  <li><code>sequential_thinking_tool</code>（强制 step-by-step 写思考）</li>
+</ul>
+
+<p>SWE-Bench Verified 单次成功率 60.6–62.8%，5 并发 + 三阶段选择（ensemble vote → regression filter → o1 picks best）→ 68.2%，一度榜首。<a href="https://se-research.bytedance.com/blogs/trae-on-swe-bench-verified-682">Trae 博客</a></p>
+
+<h4>对我们的启示</h4>
+<p>CKG（Code Knowledge Graph）就是 LocAgent 那套思想的工程化版本。两点确认：</p>
+<ul>
+  <li>大厂榜首系统都建了图，没有人靠纯 grep</li>
+  <li>没有人在 SWE-bench 顶部用 LSP。LSP 理论最优，但生产工程负担太大（per-language server bootstrap + cold-start indexing + Docker 内可靠性），大家都自建 tree-sitter 图</li>
+</ul>
+
+<h3>5.4 Alibaba LingmaAgent（FSE'25 Industry Track）— 唯一真实生产数据</h3>
+
+<p>LingmaAgent 是阿里云内部部署的版本，论文给出真实业务数据（Java / TS / JS）：</p>
+<ul>
+  <li>16.9% 全自动</li>
+  <li>43.3% 在 &lt; 5 次人工介入下完成</li>
+  <li>function-level accuracy 49.3% / file-level 67.7%</li>
+</ul>
+<p>架构：top-down AST → KG 构建，然后 UCT-based MCTS 探索：BM25 在扩展阶段做优先级、LLM reward agent（CoT，0-10 打分，≥6 留下）在 simulation 阶段、调用/被调用邻域增长在 backprop。<a href="https://arxiv.org/abs/2406.01422">arxiv:2406.01422</a></p>
+
+<h4>对我们的启示</h4>
+<p>非 Python 大型多语言仓上唯一公开生产数据。Function-level 49% 给我们一个心理基线——我们不应期望 SWE-bench Python 上 70% 的数字直接迁移到 tapd 大仓。</p>
+
+<h3>5.5 反例：Claude Code 为什么不建索引</h3>
+
+<p>Claude Code 的设计 retrospective 直接拒绝了向量库：</p>
+
+<blockquote>
+"Early versions used RAG with a local vector database, but we found pretty quickly that agentic search generally works better."
+<div class="cite">— <a href="https://vadim.blog/claude-code-no-indexing">vadim.blog · Claude Code, no indexing</a></div>
+</blockquote>
+
+<p>Claude Code 的策略：三层 Glob → Grep → Read，需要时启动子 agent（Haiku，隔离 context）做"深探"。靠 92% prompt cache 命中率维持经济性，没有任何持久化索引。</p>
+
+<h4>对我们的启示</h4>
+<p>不要做向量库。两个理由：</p>
+<ol>
+  <li>Multi-SWE 上 BM25-alone floor 在 1.96%，embedding 帮忙也只是 marginal</li>
+  <li>per-issue snapshot 语义下，按 commit 临时 tree-sitter 比维护一个会过期的索引更省事更新鲜</li>
+</ol>
+
+<h3>5.6 综合：Repo Map 该做成什么样？</h3>
+
+<div class="callout good">
+<strong>方案选型：</strong>
+<ul>
+  <li>短期（本次重构）：复用现有 <code>AnalysisResult</code>，挑出 techStack / keyDirectories / patterns 大概 500–1000 tokens 作为 navigation hint 注入 analyze prompt。</li>
+  <li>中期：在 <code>analyze-repository</code> agent 里加 tree-sitter + PageRank 生成 Aider 风格 repo map，写到 <code>AnalysisResult</code> 一个新字段，~2 k tokens。</li>
+  <li>长期（半年级别）：考虑 LocAgent 式图存储 + 显式 graph traverse 工具。<em>本次不做。</em></li>
+</ul>
+<strong>不做：</strong>向量库 / embedding 索引 / LSP server / 持久化索引数据库。
+</div>
+
+</section>
+
+<!-- =============================== EVIDENCE 3 =============================== -->
+<section id="evi-reproducer">
+<h2>6. 证据 3 — Reproducer-first 的位置之争</h2>
+
+<p>核心问题：跑测试复现 bug 这件事，该放在 pipeline 哪儿？</p>
+
+<h3>6.1 MarsCode / Trae — 把 Reproducer 放最前</h3>
+
+<p>MarsCode 是 SWE-Bench Lite 当时的 #1（34%），架构：</p>
+<pre><code>Reproducer  →  Repo Browser  →  Code Editor  →  Test Analyst</code></pre>
+<p>Reproducer 是 pipeline 的第一站，先尝试用 issue 文本生成一个可执行的 reproducer test。能跑通的话，stack trace 直接成为 localization 的强信号。<a href="https://arxiv.org/html/2409.00899v2">arxiv html</a></p>
+
+<h3>6.2 SpecRover — Reproducer 在 Context Retrieval 之前</h3>
+<p>同上结构：<code>Reproducer → Context → Patch → Review → Select</code>。Reproducer 输出的 trace 是 Context Retrieval 的输入。<a href="https://arxiv.org/abs/2408.02232">arxiv:2408.02232</a></p>
+
+<h3>6.3 Agentless — Reproducer 用来选 patch，不用来定位</h3>
+<p>Agentless 不用 reproducer 做 localization；它用 reproducer 在最后阶段过滤 patch（"应该让 reproducer 通过的 patch 才留下"）。<a href="https://arxiv.org/abs/2407.01489">arxiv:2407.01489</a></p>
+
+<h3>6.4 反例：AutoCodeRover django-139645 case study</h3>
+
+<p>AutoCodeRover 论文里专门讲了一个失败案例：从 bug 描述抽出的 reproducer 涉及类 A，但真实 buggy class 是 B（A 只是触发路径上的一环）。Reproducer 把 patcher 引偏到 A，最终 patch 错误。<a href="https://arxiv.org/pdf/2404.05427">arxiv pdf §6</a></p>
+
+<h4>对我们的启示</h4>
+
+<p>Reproducer-first 的好处明显（stack trace 是免费的精准信号），但前提是 <strong>defect 描述清晰到能写出 stub</strong>。tapd 短中文描述常常不够。两条路：</p>
+
+<div class="grid2">
+  <div class="callout good">
+    <strong>选项 A（保守）</strong>
+    保持当前顺序 <code>analyze → HITL → reproduce</code>。Intent agent 输出 <code>reproducerHypothesis</code> 字段（"如果要写 stub，大概会长这样"），但实际 reproduce 留在原阶段。<br><br>
+    <em>风险低，改动小</em>。
+  </div>
+  <div class="callout warn">
+    <strong>选项 B（激进）</strong>
+    在 analyze 内部尝试 lightweight reproduce（哪怕只 grep 错误消息看哪里抛），用收获的信息精化 localize。<br><br>
+    <em>有 AutoCodeRover django case 风险，把 reproducer 失误传播到 localize。</em>
+  </div>
+</div>
+
+<p>R2 方案取选项 A。Reproducer 顺序留到 Phase 后续再评估。</p>
+
+</section>
+
+<!-- =============================== EVIDENCE 4 =============================== -->
+<section id="evi-test">
+<h2>7. 证据 4 — 测试是唯一可靠的 patch 选择信号</h2>
+
+<p>核心问题：如果我们让 LLM 同时生成多个候选 patch，怎么选？</p>
+
+<h3>7.1 Agentless 的 ablation（决定性证据）</h3>
+
+<table>
+<tr><th>配置</th><th>SWE-Lite 通过率</th><th>成本</th></tr>
+<tr><td>单次贪心生成</td><td>23.33%</td><td>$0.11</td></tr>
+<tr><td>+ 42 候选采样 + AST-标准化 majority vote</td><td>26.00%</td><td>$0.34</td></tr>
+<tr><td>+ 回归测试 + 复现测试过滤</td><td>27.33%</td><td>$0.34</td></tr>
+<tr><td><strong>upper bound</strong>（所有 42 候选中"有一个对"）</td><td><strong>41.0%</strong></td><td>—</td></tr>
+</table>
+
+<p>解读两点：</p>
+<ol>
+  <li>采样 + 投票 alone 涨 2.7 pp；加测试过滤再涨 1.3 pp。两者都不是大跳。</li>
+  <li><strong>Upper bound 41% 说明 14 pp 的提升留在桌上了</strong>——正确的 patch 经常在候选集里，但选择器没找到。这才是 SOTA 系统里最大的"未填坑"。</li>
+</ol>
+
+<p><a href="https://arxiv.org/abs/2407.01489">arxiv:2407.01489</a> / <a href="https://github.com/OpenAutoCoder/Agentless">github</a></p>
+
+<h3>7.2 LLM-as-Judge 在 patch 选择上的不稳定性</h3>
+
+<p>2025 年好几篇专门评估 LLM-judge 的论文都得到类似结论：</p>
+
+<table>
+<tr><th>研究</th><th>结论</th></tr>
+<tr><td><a href="https://arxiv.org/abs/2511.10865">HITL LLM-as-Judge for Patches (2025)</a></td><td>共识 patch 集 precision 0.80 / recall 0.94 / κ=0.75；歧义集 precision 降到 0.65 / κ 0.57</td></tr>
+<tr><td><a href="https://arxiv.org/html/2512.20159v1">AXIOM (2025)</a></td><td>judge 在 paraphrasing / verbosity / 格式扰动下会翻转，<em>排序不稳定</em></td></tr>
+<tr><td><a href="https://arxiv.org/pdf/2507.18755">Agentic Repair at Scale (2025)</a></td><td>生产部署里 judge 能做 0.86 precision 的"过滤明显坏的"，但不能可靠 rank 相似候选</td></tr>
+</table>
+
+<h4>对我们的启示</h4>
+
+<div class="callout bad">
+<strong>不要做</strong>：让 LLM 在多个候选 patch 之间排序、择优、做最终决策。这正好是 judge 最不可靠的场景。
+</div>
+
+<div class="callout good">
+<strong>可以做</strong>：让 LLM 做"明显坏的"过滤（precision 0.86，recall 0.94 这个工作模式）。剩下的"好但难分"，交给 sandbox 跑回归测试和复现测试。
+</div>
+
+<h3>7.3 Trae 的三阶段选择 — 工业 SOTA 套路</h3>
+
+<p>Trae 5 并发跑 → 68.2%（vs 单跑 62.8%）。三阶段选择：</p>
+<ol>
+  <li><strong>Ensemble vote</strong>：5 个 candidate diff 用 AST normalize 后投票</li>
+  <li><strong>Regression filter</strong>：跑仓库自带的测试，砍掉破坏现存测试的</li>
+  <li><strong>o1 picks best</strong>：剩下的让强 model 做最终一票</li>
+</ol>
+
+<p>关键：LLM judge 是<strong>最后一道</strong>过滤，且作用在已经被前两道过滤过的小集合上。<a href="https://se-research.bytedance.com/blogs/trae-on-swe-bench-verified-682">Trae 博客</a></p>
+
+<h3>7.4 综合：candidate 选择该怎么做？</h3>
+
+<div class="callout info">
+<strong>本次重构不引入 Best-of-N implement</strong>（那是 Phase 2 的事）。但要为未来铺路：让 analyze 输出的 <code>consideredStrategies</code> 数组未来能成为 Best-of-N 的种子，每个 strategy 独立生成 patch、回归+复现测试过滤、最后让 LLM 在 ≤2 个候选里挑（这是 LLM judge 可靠的小区间）。
+</div>
+
+</section>
+
+<!-- =============================== EVIDENCE 5 =============================== -->
+<section id="evi-rex">
+<h2>8. 证据 5 — 探索 vs 利用：REx 的 bandit 视角</h2>
+
+<p>核心问题：有 N 个候选时，是"采样更多 fresh 候选"还是"refine 现有候选"？</p>
+
+<h3>8.1 REx（NeurIPS 2024）— 把 repair 形式化为 bandit</h3>
+
+<p>Tang et al. 把 LLM-driven program repair 建模为 <strong>arm-acquiring bandit</strong>：</p>
+
+<ul>
+  <li>每个 candidate 是一个 arm；每个 arm 上有 Beta posterior 描述"它最终能通过测试"的概率</li>
+  <li>每一步：要么 <em>exploit</em>（refine 当前最高 posterior 的 arm），要么 <em>explore</em>（refine 低 posterior 的 arm，或者拉一个全新 arm）</li>
+  <li>用 Thompson Sampling 决定</li>
+</ul>
+
+<p>结果：在 APPS-Competition、loop invariant、ARC 三个任务上，<strong>1.5–5× 更少 LLM 调用</strong>达到 Reflexion / 纯采样的准确率。<a href="https://proceedings.neurips.cc/paper_files/paper/2024/file/d5c56ec4f69c9a473089b16000d3f8cd-Paper-Conference.pdf">NeurIPS PDF</a> / <a href="https://github.com/haotang1995/REx">github</a></p>
+
+<h3>8.2 REx 的两个反 intuition 启示</h3>
+
+<ol>
+  <li>纯 "采样 N 个全新 candidate" 浪费 budget——很多 arms 的潜力很快就能判断（一两次执行测试），不需要每个都展开。</li>
+  <li>纯 "iterate 当前最好" 容易陷入 local optima——同一个错思路 reflection 多少次都改不出对答案。</li>
+</ol>
+
+<h4>对我们的启示</h4>
+
+<p>当前 Torin Phase 1.5 已经有 <code>previousAttempts</code> Reflexion 形态——iteration on best。REx 启示我们：当多个 attempt 都失败时，下一步应该是<strong>切换到另一个 strategy</strong>（探索），而不是继续 refine 这个 strategy（利用）。这恰好是我们 R2 把 <code>consideredStrategies[]</code> 做成 fallback 队列的理由。</p>
+
+<p>具体流程：</p>
+<pre><code>implement attempt 1: 用 strategy[0]
+  → 测试失败 → 添加 attemptMemo, refine strategy[0]
+implement attempt 2: refine strategy[0]
+  → 测试失败 → REx 提示：切换 arm
+implement attempt 3: 改用 strategy[1]   ← 关键</code></pre>
+
+</section>
+
+<!-- =============================== ANTI =============================== -->
+<section id="anti">
+<h2>9. 反向证据：哪些招要警惕</h2>
+
+<h3>9.1 Cognition "Don't Build Multi-Agents"（2024-2025）— 反多 agent 工程</h3>
+
+<p>Devin 团队（Cognition）的 blog，根据自己产品迭代的失败经验总结。核心论点：</p>
+
+<blockquote>
+"Multi-agent systems compress full context into summaries when handing off between agents. Every summarization is lossy. We've found that a single agent with the full trace consistently outperforms a multi-agent decomposition with summary handoffs."
+<div class="cite">— <a href="https://cognition.ai/blog/dont-build-multi-agents">cognition.ai/blog/dont-build-multi-agents</a></div>
+</blockquote>
+
+<p>他们用 "telephone game"（电话游戏，每经一手信息就丢一些）形容多 agent 系统失败模式。具体反 pattern：</p>
+<ol>
+  <li>agent A 跑完后只给 agent B 一段 JSON 总结</li>
+  <li>agent B 看不到 A 的具体思考、看的代码、试过的 grep</li>
+  <li>B 做决策时缺关键 context → 错误判断</li>
+</ol>
+
+<h4>对我们的启示</h4>
+<p>这条反例直接<strong>否决了我之前的 3-pass 方案</strong>（triage-defect-intent → localize-defect-root-cause → explore-fix-strategies，三个独立 sandbox agent 通过 zod schema 传递）。R2 改成：</p>
+<ul>
+  <li>Intent agent 独立保留（它只做格式转换，没 telephone game 风险——下游只需 intent 的输出，本来 intent 也没有可丢的"过程信息"）</li>
+  <li>Localize + strategy 枚举<strong>合并到同一个 sandbox agent run</strong>。Strategy 枚举作为 analyze 输出 schema 的字段，agent 在同一 conversation 里产出，无 handoff 损失。</li>
+</ul>
+
+<h3>9.2 Context Rot — 中段信息丢失</h3>
+<p>Anthropic 与多家学界做的 ablation 显示：长上下文里中段位置的信息，模型召回精度比首尾低 15–20 pp。</p>
+<h4>启示</h4>
+<p>Intent 注入到 analyze prompt 时，应当放在<strong>系统 prompt 末尾 + user prompt 开头</strong>这两个高召回区，不是塞在中间。</p>
+
+<h3>9.3 Vector DB / Embedding 索引仓库</h3>
+<p>三条独立证据反对：</p>
+<ul>
+  <li>Claude Code retrospective（5.5 节）</li>
+  <li>Multi-SWE-bench：BM25-alone floor 1.96%，embedding 也只是 marginal complement</li>
+  <li>per-commit snapshot 场景下，索引天然会过期</li>
+</ul>
+
+<h3>9.4 Mode Collapse — Verbalized Sampling 量化</h3>
+
+<p>Zhang et al. 2025 的 <a href="https://arxiv.org/abs/2510.01171">Verbalized Sampling</a> 论文证明：post-trained LLM（包括 GPT-4o, Claude 3.5, Llama 3）在 T=0.8 时多次采样会高度相似，多样性 score 比"明确要求列 N 个不同方案 + 写出概率"低 1.6–2.1×。</p>
+
+<h4>启示</h4>
+<p>如果让 analyze agent 输出 "3 个候选 strategy"，prompt 写法很重要：</p>
+<ul>
+  <li>❌ "请给出 3 个候选 strategy"（容易 mode collapse）</li>
+  <li>✅ "请列出 3 个<strong>显著不同</strong>的 strategy，对每个标注你对它正确的<strong>信心</strong>（0-1），它们应代表<strong>不同的修复路径</strong>（例如：在 bug 处修 / 在上游守 / 在下游兜底）"</li>
+</ul>
+
+<h3>9.5 LLM-as-Judge 在排序相似候选时不稳定</h3>
+
+<p>AXIOM、CodeJudgeBench 等多个 benchmark 都证明：fine-tuned judge model 经常比 general CoT 弱；judge 对 verbosity、格式、paraphrasing 都敏感会翻转结果。</p>
+
+<h4>启示</h4>
+<p>已在 7.2 节展开，不重复。</p>
+
+<h3>9.6 CTQRS — LLM 在缺字段时幻觉补全</h3>
+
+<p>CTQRS 是 LLM 生成 bug report 质量的 benchmark；同时也指出 LLM 在 reformat / 结构化 bug report 时<strong>会编造"用户没说的"内容</strong>。如果让 LLM 提取 "expected behavior" 但原文压根没说，模型倾向于自己编一个"听起来对"的答案。</p>
+
+<h4>启示</h4>
+<p>Intent schema 必须有 <code>unknowns: string[]</code> 字段，并在 prompt 里<strong>奖励</strong>"如实标注 unknown"，<strong>明确禁止</strong>编造缺失字段。可以放 few-shot 示例：</p>
+<pre><code>defectDescription: "导出 Excel 金额不对"
+DefectIntent:
+  expectedBehavior: null
+  actualBehavior: "导出的 Excel 中金额数据不正确"
+  unknowns: [
+    "金额是怎么错的（错位 / 单位错 / 精度丢失 / 全错为 0？）",
+    "哪个导出入口（订单 / 报表 / 财务对账？）",
+    "影响哪些用户角色"
+  ]</code></pre>
+
+</section>
+
+<!-- =============================== CN =============================== -->
+<section id="cn">
+<h2>10. 中文 tapd 场景的特定考虑</h2>
+
+<h3>10.1 学术界真空</h3>
+
+<p>我们花了不少功夫查中文 bug 报告 / 内部研发系统的论文。基本结论：</p>
+<ul>
+  <li>Multi-SWE-bench（阿里 2025）覆盖多<em>编程语言</em>（Python / Java / TS / Go / Rust），不是多<em>issue 语言</em>。所有 issue 仍然是英文。</li>
+  <li>Tencent CodeBuddy 集成了 TAPD，但<strong>没有公开方法学</strong>。商业产品。</li>
+  <li>Bytedance Trae、Alibaba LingmaAgent 用的都是英文 SWE-Bench 来评估，部署在国内但没有针对中文 issue 的 ablation 公开。</li>
+</ul>
+
+<p>结论：tapd 中文 defect → 修复 这条路上，没有先验论文可以照抄。我们的设计需要自己定义评估。</p>
+
+<h3>10.2 可借鉴的 cross-lingual 模式：CrosLocator</h3>
+
+<p>CrosLocator 是一个 cross-lingual bug localization 框架，做的是非英文 bug report 配英文代码仓库的检索。关键启示：<strong>不要全文翻译</strong>。中文 UI 文案（按钮标签、错误弹窗）是<em>literal grep target</em>——代码里可能有 i18n key 或硬编码字符串与之直接对应。翻译成英文会丢失这个匹配。</p>
+
+<p>所以 intent agent 的处理规则应当是：</p>
+<ol>
+  <li>把整体描述翻译/归一化成结构化 summary</li>
+  <li>但 <code>keyTerms</code> 字段<strong>保留中文原文</strong>，作为后续 grep 查询的种子</li>
+  <li>同时保留可能的英文翻译（双语 keyTerms），用 OR 形式覆盖两边</li>
+</ol>
+
+<h3>10.3 项目术语表（domain glossary）注入</h3>
+
+<p>tapd defect 里经常出现产品/业务术语（"对账中心"、"PMI 计算"、"灰度配置"），对应到代码可能是某个具体模块名（<code>reconciliation/</code>、<code>pmi-calculator/</code>、<code>canary/</code>）。这种映射 LLM 凭空猜不准。</p>
+
+<p>解决思路：在 <code>analyze-repository</code> 时让 agent 顺手产出一个 <code>glossary: { 业务术语 → 代码概念 }</code> 字段，缓存到 Project。Intent agent 在 prompt 里注入 glossary 后，能把"对账中心"映射到 <code>src/reconciliation/</code>。</p>
+
+<p>这是本次重构可以做的低成本提升，但<strong>不在 R2 第一版强制要求</strong>——先把 intent 前置 + repo map 跑通看效果，glossary 是后续 phase。</p>
+
+<h3>10.4 unknowns 字段在中文场景的重要性</h3>
+
+<p>中文 tapd 短 defect 缺字段的比例比英文 GitHub Issue 高一个数量级。<code>unknowns</code> 字段 + 显式"禁止幻觉"prompt 不是 nice-to-have，是必须有。否则下游 analyze 会被一段编造的 "expected behavior" 引导到错误根因。</p>
+
+</section>
+
+<!-- =============================== R2 =============================== -->
+<section id="r2">
+<h2>11. 修订方案 R2 逐段解读</h2>
+
+<p>把所有证据综合，得到这个 R2 形态：</p>
+
+<pre><code>analyze stage runs:
+  ┌──────────────────────────────────────────────────────────────┐
+  │ 1) intentBrief = triageDefectIntent(defectDescription)        │
+  │    text-only, ~6 turns, 便宜模型                              │
+  │    输出: { summary, expectedBehavior, actualBehavior,         │
+  │            defectType, keyTerms (bilingual),                  │
+  │            searchHypotheses, reproducerHypothesis, unknowns } │
+  ├──────────────────────────────────────────────────────────────┤
+  │ 2) repoMap = lookupRepoMap(projectId)                         │
+  │    确定性活动（DB 查询），server 侧                            │
+  │    取最新 ANALYZE_REPOSITORY 的 navigation 摘要 (1-2k tokens) │
+  ├──────────────────────────────────────────────────────────────┤
+  │ 3) analysis = analyzeDefect(sandbox, intentBrief, repoMap)    │
+  │    sandbox read-only, ~25 turns                                │
+  │    Intent + repoMap 作为 prompt 缓存前缀                       │
+  │    输出 schema 扩展两个字段:                                   │
+  │      candidateRootCauses[1-3]   ← 多个根因排序                │
+  │      consideredStrategies[1-3]  ← Verbalized Sampling 风格    │
+  │        each { approach, scopeFiles, tradeoffs, riskClass,     │
+  │               recommendation, expectedFailureMode }            │
+  ├──────────────────────────────────────────────────────────────┤
+  │ 4) HITL gate (一次)                                            │
+  └──────────────────────────────────────────────────────────────┘</code></pre>
+
+<h3>11.1 为什么是 2 个 agent 而非 3 个</h3>
+<p>见 <a href="#anti">第 9.1 节 Cognition 反例</a>。Intent → analyze 之间的 handoff 损失可控（intent 输出就是给下游用的结构化约束），但 analyze → strategy enumeration 之间共享强 context，独立 agent 会丢失"agent 看过的文件、试过的搜索、对哪些 hypothesis 已证实"等关键信息。合并到一个 agent run 里，让它在同一 conversation 末段产出 consideredStrategies。</p>
+
+<h3>11.2 为什么 intent 用便宜模型</h3>
+<p>见 <a href="#evi-intent">第 4.4 节 Google 论文</a>。Intent 是文本→结构化任务，complexity 不需要 Opus 4.7。Haiku 4.5 完全够用。当前 <code>runAgent</code> 只读全局 <code>AGENT_MODEL</code>，加 per-agent override 是低成本改造。</p>
+
+<h3>11.3 为什么 searchHypotheses 必须是 grep-able queries</h3>
+<p>见 <a href="#evi-intent">第 4.2 节 AEGIS</a>。Summary 作为文本拼接只值 4.3 pp，作为下游<em>显式约束</em>值 23.7 pp。Search hypotheses 是 analyze agent 第一步的 todo list（"先把这些 grep 跑一遍"），不是参考资料。</p>
+
+<h3>11.4 为什么 repo map 是确定性活动而非 agent</h3>
+<p>查 ANALYZE_REPOSITORY 历史输出是 DB 操作，本来就是确定性的。塞进 Temporal workflow 不需要 LLM 介入。这同时避免了 workflow 的 determinism boundary 问题（workflow 代码不能直接做 IO）——把查询放在 server 侧 ResolveDefectService.execute 里、查完结果作为 workflow input。</p>
+
+<h3>11.5 为什么不在 analyze 内嵌 reproducer</h3>
+<p>见 <a href="#evi-reproducer">第 6.4 节 AutoCodeRover django case</a>。Reproducer 失误会把 localize 引偏。当前 Torin 的 <code>analyze → HITL → reproduce</code> 顺序保留，intent agent 只输出 <code>reproducerHypothesis</code>（"如果要写 stub，大概会长这样"），实际 reproduce 留在 REPRODUCE 阶段。</p>
+
+<h3>11.6 为什么单一 HITL gate</h3>
+<p>三个 sub-stage 各自 gate 会让 reviewer 点击量×3，且与 <code>CANONICAL_STAGE_ORDER</code> 不兼容。Reviewer 在一屏看到 intent + candidateRootCauses + consideredStrategies 是<em>更多</em>信息，不是更少。Rejection 反馈下三段全重跑（intent 6 turns 很便宜）。</p>
+
+<h3>11.7 为什么 candidateRootCauses 和 consideredStrategies 都是 array</h3>
+<p>见 <a href="#evi-rex">第 8 节 REx</a>。Array 是为未来 implement 阶段的 fallback queue 准备的种子。本次 analyze 阶段只用 <code>candidateRootCauses[0]</code> 和 <code>consideredStrategies[recommendedIndex]</code> 驱动下游，但额外候选保留在 schema 里、写到 stage event，未来 implement 失败时 workflow 可以自动切换 strategy 而无需重跑 analyze。</p>
+
+<h3>11.8 与现有 Phase 路线图的关系</h3>
+<table>
+<tr><th>Phase</th><th>已落地</th><th>本次 R2</th><th>未来</th></tr>
+<tr><td>Phase 1（已落地）</td><td>analyze schema 扩展（riskClass / scopeDeclaration / hasTestInfra / hasWebUI）+ reproduce agent 3 模式 + scope check + filter 多源 oracle</td><td>—</td><td>—</td></tr>
+<tr><td>Phase 1.5（已落地）</td><td>Reflexion previousAttempts in implement + precondition guard</td><td>—</td><td>—</td></tr>
+<tr><td>R2（本次提案）</td><td>—</td><td>intent 前置 + analyze 升级（含 candidate/strategy 数组）+ repo map 注入</td><td>—</td></tr>
+<tr><td>Phase 2（已规划）</td><td>—</td><td>不动</td><td>Best-of-N implement（用 R2 输出的 strategies 数组作种子）、critic agent、auto-approve trivial、repo memory</td></tr>
+</table>
+
+</section>
+
+<!-- =============================== REFS =============================== -->
+<section id="refs">
+<h2>12. 完整参考文献</h2>
+
+<h3>12.1 核心论文（按主题分组）</h3>
+
+<h4>Intent / Spec extraction</h4>
+<dl class="ref-list">
+  <dt>SpecRover: Code Intent Extraction via LLMs</dt>
+  <dd>Ruan, H. et al. ICSE 2025. <a href="https://arxiv.org/abs/2408.02232">arxiv:2408.02232</a> · <a href="https://abhikrc.com/pdf/ICSE25.pdf">ICSE'25 PDF</a></dd>
+  <dt>AEGIS: Augmenting Bug Reports with Expected Behaviors</dt>
+  <dd>FSE 2025. <a href="https://arxiv.org/html/2504.18804v1">arxiv html</a></dd>
+  <dt>Small Models, Big Results: Intent Extraction via Decomposition</dt>
+  <dd>Google Research blog 2025. <a href="https://research.google/blog/small-models-big-results-achieving-superior-intent-extraction-through-decomposition/">research.google</a></dd>
+  <dt>IQLoc: Information Quality-Aware Bug Localization</dt>
+  <dd>2022. <a href="https://arxiv.org/abs/2204.09655">arxiv:2204.09655</a></dd>
+  <dt>CodeR: Issue Resolving with Multi-Agent and Task Graphs</dt>
+  <dd>Lin, D. et al. 2024. <a href="https://arxiv.org/abs/2406.01304">arxiv:2406.01304</a></dd>
+</dl>
+
+<h4>Fault localization on large repos</h4>
+<dl class="ref-list">
+  <dt>LocAgent: Graph-Guided LLM Agents for Code Localization</dt>
+  <dd>ACL 2025. <a href="https://arxiv.org/abs/2503.09089">arxiv:2503.09089</a> · <a href="https://github.com/gersteinlab/LocAgent">github</a></dd>
+  <dt>AutoCodeRover: Autonomous Program Improvement</dt>
+  <dd>Zhang, Y. et al. 2024. <a href="https://arxiv.org/pdf/2404.05427">arxiv pdf</a> · <a href="https://github.com/AutoCodeRoverSG/auto-code-rover">github</a></dd>
+  <dt>MarsCode Agent</dt>
+  <dd>Bytedance 2024-2025. <a href="https://arxiv.org/html/2409.00899v2">arxiv html</a></dd>
+  <dt>Trae Agent</dt>
+  <dd>Bytedance 2025. <a href="https://arxiv.org/abs/2507.23370">paper</a> · <a href="https://se-research.bytedance.com/blogs/trae-on-swe-bench-verified-682">blog</a></dd>
+  <dt>LingmaAgent: Industrial Deployment of LLM-Agent Repair (Alibaba)</dt>
+  <dd>FSE 2025 Industry. <a href="https://arxiv.org/abs/2406.01422">arxiv:2406.01422</a></dd>
+  <dt>Lingma SWE-GPT 72B (Alibaba)</dt>
+  <dd>2024. <a href="https://arxiv.org/abs/2411.00622">arxiv:2411.00622</a></dd>
+</dl>
+
+<h4>Agentless / N-best / Selection</h4>
+<dl class="ref-list">
+  <dt>Agentless: Demystifying LLM Agents for Software Engineering</dt>
+  <dd>Xia, C. et al. 2024. <a href="https://arxiv.org/abs/2407.01489">arxiv:2407.01489</a> · <a href="https://github.com/OpenAutoCoder/Agentless">github</a></dd>
+  <dt>SWE-Search: MCTS for SWE Agents</dt>
+  <dd>ICLR 2025. <a href="https://arxiv.org/html/2410.20285v2">arxiv html</a></dd>
+  <dt>SWE-Debate: Multi-Trace Debate Over Fault Propagation</dt>
+  <dd>ICSE 2026. <a href="https://arxiv.org/abs/2507.23348">arxiv:2507.23348</a> · <a href="https://github.com/YerbaPage/SWE-Debate">github</a></dd>
+</dl>
+
+<h4>Reflection / Self-correction / Exploration</h4>
+<dl class="ref-list">
+  <dt>Reflexion: Language Agents with Verbal Reinforcement Learning</dt>
+  <dd>Shinn, N. et al. 2023. <a href="https://arxiv.org/pdf/2303.11366">arxiv pdf</a></dd>
+  <dt>Self-Refine: Iterative Refinement with Self-Feedback</dt>
+  <dd>Madaan, A. et al. <a href="https://openreview.net/pdf?id=S37hOerQLB">openreview</a></dd>
+  <dt>REx: Code Repair as Arm-Acquiring Bandit</dt>
+  <dd>Tang, H. et al. NeurIPS 2024. <a href="https://proceedings.neurips.cc/paper_files/paper/2024/file/d5c56ec4f69c9a473089b16000d3f8cd-Paper-Conference.pdf">NeurIPS PDF</a> · <a href="https://github.com/haotang1995/REx">github</a></dd>
+  <dt>LATS: Language Agent Tree Search</dt>
+  <dd>2023. <a href="https://arxiv.org/pdf/2310.04406">arxiv pdf</a></dd>
+  <dt>AlphaCodium</dt>
+  <dd>2024. <a href="https://arxiv.org/abs/2401.08500">arxiv:2401.08500</a></dd>
+</dl>
+
+<h4>Judge reliability / Mode collapse / Anti-patterns</h4>
+<dl class="ref-list">
+  <dt>Verbalized Sampling: How to Mitigate Mode Collapse</dt>
+  <dd>Zhang, Y. et al. 2025. <a href="https://arxiv.org/abs/2510.01171">arxiv:2510.01171</a></dd>
+  <dt>IdentityChain: Self-Consistency in Code LLMs</dt>
+  <dd>ICLR 2024. <a href="https://arxiv.org/abs/2310.14053">arxiv:2310.14053</a></dd>
+  <dt>HITL LLM-as-Judge for Patches</dt>
+  <dd>2025. <a href="https://arxiv.org/abs/2511.10865">arxiv:2511.10865</a></dd>
+  <dt>Agentic Program Repair at Scale</dt>
+  <dd>2025. <a href="https://arxiv.org/pdf/2507.18755">arxiv pdf</a></dd>
+  <dt>AXIOM: Judge Reliability Benchmark</dt>
+  <dd>2025. <a href="https://arxiv.org/html/2512.20159v1">arxiv html</a></dd>
+  <dt>SWE-bench Leaderboard Dissection</dt>
+  <dd>2025 综述. <a href="https://arxiv.org/pdf/2506.17208">arxiv pdf</a></dd>
+  <dt>Multi-SWE-bench (multi-language benchmark)</dt>
+  <dd>Alibaba 2025. <a href="https://arxiv.org/pdf/2504.02605">arxiv pdf</a></dd>
+</dl>
+
+<h3>12.2 生产系统设计立场</h3>
+<dl class="ref-list">
+  <dt>Cognition — Don't Build Multi-Agents</dt>
+  <dd><a href="https://cognition.ai/blog/dont-build-multi-agents">cognition.ai/blog/dont-build-multi-agents</a></dd>
+  <dt>Anthropic — Building Effective Agents</dt>
+  <dd><a href="https://www.anthropic.com/engineering/building-effective-agents">anthropic.com/engineering/building-effective-agents</a></dd>
+  <dt>Claude Code — No Indexing</dt>
+  <dd><a href="https://vadim.blog/claude-code-no-indexing">vadim.blog/claude-code-no-indexing</a> · <a href="https://news.ycombinator.com/item?id=44106944">HN 讨论</a></dd>
+  <dt>Aider — Repo Map</dt>
+  <dd><a href="https://aider.chat/2023/10/22/repomap.html">2023 原始博客</a> · <a href="https://aider.chat/docs/repomap.html">docs</a></dd>
+  <dt>Aider — Architect Mode</dt>
+  <dd><a href="https://aider.chat/2024/09/26/architect.html">aider.chat/2024/09/26</a></dd>
+  <dt>Cursor 2.0 — Best-of-N UI</dt>
+  <dd><a href="https://cursor.com/blog/2-0">cursor.com/blog/2-0</a> · <a href="https://cursor.com/blog/agent-best-practices">agent best practices</a></dd>
+  <dt>OpenHands SDK + CodeAct 2.1</dt>
+  <dd><a href="https://arxiv.org/html/2511.03690v1">SDK paper</a> · <a href="https://openhands.dev/blog/openhands-codeact-21-an-open-state-of-the-art-software-development-agent">CodeAct 2.1 blog</a></dd>
+  <dt>Devin 2.0</dt>
+  <dd><a href="https://cognition.ai/blog/devin-2">cognition.ai/blog/devin-2</a></dd>
+  <dt>Codex CLI Reference</dt>
+  <dd><a href="https://developers.openai.com/codex/cli/reference">developers.openai.com</a></dd>
+  <dt>Martin Fowler — Humans and Agents in SE Loops</dt>
+  <dd><a href="https://martinfowler.com/articles/exploring-gen-ai/humans-and-agents.html">martinfowler.com</a></dd>
+  <dt>Moatless Tools</dt>
+  <dd><a href="https://github.com/aorwall/moatless-tools">github</a></dd>
+  <dt>Tencent CodeBuddy (TAPD-integrated)</dt>
+  <dd><a href="https://www.tencentcloud.com/products/acc">tencentcloud.com/products/acc</a></dd>
+</dl>
+
+<h3>12.3 SWE-bench / benchmarks</h3>
+<dl class="ref-list">
+  <dt>SWE-bench Verified leaderboard</dt>
+  <dd><a href="https://www.swebench.com/verified.html">swebench.com/verified.html</a></dd>
+  <dt>Live-SWE-agent（当前 OSS 领先）</dt>
+  <dd><a href="https://live-swe-agent.github.io/">live-swe-agent.github.io</a></dd>
+</dl>
+
+</section>
+
+<!-- =============================== GLOSSARY =============================== -->
+<section id="glossary">
+<h2>13. 术语表</h2>
+<dl class="ref-list">
+  <dt>Agent loop / Agent decision loop</dt>
+  <dd>LLM 自主决定下一步动作（read / grep / bash / submit）的循环。Torin 用 Claude Agent SDK 提供这个 loop，每个 stage 由一个 agent run 完成。</dd>
+  <dt>Activity（Temporal）</dt>
+  <dd>Workflow 里的 IO 操作单元。必须幂等。Torin 把 sandbox 操作、DB 操作、LLM 调用都放 activity，workflow 自己保持纯函数。</dd>
+  <dt>Best-of-N</dt>
+  <dd>同一题跑 N 次，挑一个最好。SOTA SWE-agent 系统几乎都用 Best-of-N 在 leaderboard 顶部刷分（典型 5-10 个 attempts）。</dd>
+  <dt>BM25</dt>
+  <dd>经典 IR 排序算法，基于词频和文档长度归一化。在代码检索上仍是强 baseline。</dd>
+  <dt>CKG（Code Knowledge Graph）</dt>
+  <dd>把仓库构造成图（class/function 节点 + 调用/继承 边）。Trae、LingmaAgent 都用类似结构。</dd>
+  <dt>HITL（Human-in-the-loop）</dt>
+  <dd>人工审批关键节点。Torin 的 analyze 和 final PR 都有 HITL gate。</dd>
+  <dt>Intent</dt>
+  <dd>本文档语境下，指对原始 defect description 的结构化理解：expected/actual behavior、defect type、key terms、search hypotheses、unknowns 等。</dd>
+  <dt>Mode collapse</dt>
+  <dd>LLM 多次采样时输出过度相似的现象，限制了 Best-of-N 的多样性收益。</dd>
+  <dt>MCTS（Monte Carlo Tree Search）</dt>
+  <dd>SWE-Search、LingmaAgent 等用来在 "下一步 action" 空间里做带剪枝的探索。</dd>
+  <dt>PageRank（在 repo map 语境下）</dt>
+  <dd>把代码符号当图节点、调用关系当边，跑 PageRank 得到符号"重要性"，用于挑选要放入 map 的 top-N。Aider 的核心做法。</dd>
+  <dt>Pass@1 / Pass@N</dt>
+  <dd>SWE-bench 指标。Pass@1 = 第一次提交就对的比例；Pass@N = N 次提交里至少一次对。</dd>
+  <dt>Prompt cache</dt>
+  <dd>Anthropic API 的功能：标记 prompt 前缀作为缓存项，5 分钟内重用降 90% 输入 token 成本。</dd>
+  <dt>REx</dt>
+  <dd>NeurIPS'24 论文，把 LLM repair 形式化为 arm-acquiring bandit，给出 explore vs exploit 的 principled 策略。</dd>
+  <dt>SBFL（Spectrum-Based Fault Localization）</dt>
+  <dd>用测试通过/失败覆盖差异打分定位 bug 行。需要先有失败测试。</dd>
+  <dt>Sandbox（Torin）</dt>
+  <dd>Docker 容器，clone 了目标仓库。agent 通过 MCP server 暴露的 bash / read_file / list_files 工具操作，不能访问 host 文件系统。</dd>
+  <dt>Scope declaration</dt>
+  <dd>analyze agent 输出的"允许 implement 改动的文件清单"，filter 阶段会做 mechanical 检查砍掉超出范围的 patch。</dd>
+  <dt>Stage（Torin workflow stage）</dt>
+  <dd>analyze / reproduce / implement / filter / critic / hitl / pr 七个 stage，每个 stage 一个 TaskEvent 记录。</dd>
+  <dt>Telephone game</dt>
+  <dd>Cognition 用来形容多 agent 总结式 handoff 信息丢失的比喻。</dd>
+  <dt>Tree-sitter</dt>
+  <dd>多语言增量解析器库。Aider、LocAgent 都用它生成代码符号图，无需运行项目自身的 build 系统。</dd>
+  <dt>Verbalized Sampling</dt>
+  <dd>2025 年技巧：让 LLM 明确"列出 N 个不同方案，每个给概率"，比朴素的高温采样多样性高 1.6-2.1×。</dd>
+</dl>
+</section>
+
+<hr />
+
+<div class="footnote">
+本文档基于 2026-05-17 的三份并行调研报告整合。所有论文引用均验证 URL 可达，但论文本身内容请以原文为准（特别是 ablation 数字会随论文版本更新）。如发现引用错误或需要补充更多细节，可在 Torin 项目里另开一篇 design doc 追加。
+</div>
+
+</div>
+</body>
+</html>

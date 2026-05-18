@@ -3,6 +3,11 @@ import type * as activities from '../../activities/index.js';
 import { SANDBOX_TASK_QUEUE } from '../../task-queues.js';
 
 // main         — DB / GitHub API; high concurrency, short timeout.
+// mainAgent    — agent-driven activities that DON'T need a sandbox
+//                (currently: triageDefectIntent). On the main queue so
+//                they don't consume the bounded sandbox concurrency
+//                slot. Longer timeout + heartbeat because LLM calls
+//                can be slow / rate-limited.
 // sandboxInfra — sandbox create / destroy / push / filter. Cold-build
 //                path includes base-image pull + repo clone + tier-2
 //                setup commands (`pnpm install` etc., capped at 20min
@@ -19,6 +24,12 @@ import { SANDBOX_TASK_QUEUE } from '../../task-queues.js';
 
 export const main = proxyActivities<typeof activities>({
   startToCloseTimeout: '2 minutes',
+  retry: { maximumAttempts: 2 },
+});
+
+export const mainAgent = proxyActivities<typeof activities>({
+  startToCloseTimeout: '10 minutes',
+  heartbeatTimeout: '60 seconds',
   retry: { maximumAttempts: 2 },
 });
 

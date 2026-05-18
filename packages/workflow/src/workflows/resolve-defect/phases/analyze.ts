@@ -2,19 +2,44 @@ import type { DefectAnalysis, ResolveDefectInput } from '@torin/domain';
 import { shouldAutoApproveAnalysis } from '../../../utils/trivial-gate.js';
 import { MAX_ANALYSIS_ROUNDS } from '../constants.js';
 import type { PhaseContext } from '../index.js';
-import { main, sandboxAgent } from '../proxies.js';
+import { main, mainAgent, sandboxAgent } from '../proxies.js';
 import { buildAnalyzeStageInput } from '../transformer.js';
 
 /**
- * Analysis phase with HITL loop. Each round opens a new ANALYSIS stage
- * event. Trivial-class defects auto-approve and skip the gate; otherwise
- * we wait for a review and either return (approve) or loop with the
- * reviewer's feedback (reject).
+ * Analysis phase with HITL loop. Each round runs two sub-agents in
+ * sequence inside ONE ANALYSIS stage event:
+ *
+ *   1. triageDefectIntent  — text-only. Parses the raw defectDescription
+ *      into a structured DefectIntent (search queries, key terms,
+ *      unknowns, etc.). No sandbox tool access; runs on the main queue
+ *      to avoid consuming sandbox concurrency slots.
+ *
+ *   2. analyzeDefect       — sandbox read-only. Receives the intent
+ *      plus the project's cached repoNavigation map as a prompt prefix,
+ *      and produces the full DefectAnalysis. Starts exploration from
+ *      intent.searchHypotheses instead of doing open-ended file walking.
+ *
+ * Both invocations persist as separate AgentInvocation rows on the
+ * same TaskEvent (the schema already supports multiple). The stage's
+ * `output` is the composed DefectAnalysis (with `intent` attached so
+ * HITL UI / PR body see the full reasoning chain in one document).
+ *
+ * A single HITL gate at the end approves or rejects the composed
+ * analysis; rejection re-runs BOTH sub-agents with the reviewer
+ * feedback injected — feedback often targets one sub-pass, but
+ * re-running both is the simplest correct shape and intent is cheap.
  */
 export async function runAnalyze(
   ctx: PhaseContext,
   input: ResolveDefectInput
 ): Promise<DefectAnalysis> {
+  // Fetch the project's cached repo-navigation snapshot ONCE per
+  // workflow run, before entering the HITL retry loop. Same snapshot
+  // is reused across rounds — re-querying on every reject would only
+  // matter if an analyze-repository task landed mid-loop, which is
+  // exceedingly rare (analyze-repository is manually triggered).
+  const repoNavigation = await main.loadRepoNavigationActivity(input.projectId);
+
   let feedback: string | undefined;
 
   for (let round = 0; round < MAX_ANALYSIS_ROUNDS; round++) {
@@ -24,37 +49,67 @@ export async function runAnalyze(
         stageKey: 'ANALYSIS',
         input: buildAnalyzeStageInput({
           defectDescription: input.defectDescription,
+          repoNavigation: repoNavigation ?? undefined,
           feedback,
         }),
       },
     });
     const eventId = startedStage!.eventId;
 
-    const out = await sandboxAgent.analyzeDefectActivity(
-      ctx.sandboxState,
+    // ── Sub-agent 1: triage intent (text-only, cheap) ────────────────
+    const triageOut = await mainAgent.triageDefectIntentActivity(
       input.defectDescription,
       feedback
     );
     await main.persistAgentInvocationActivity({
       taskEventId: eventId,
-      capturedTrace: out.capturedTrace,
-      errorText: out.errorText,
+      capturedTrace: triageOut.capturedTrace,
+      errorText: triageOut.errorText,
     });
-    if (out.status !== 'SUCCESS' || !out.result) {
+    if (triageOut.status !== 'SUCCESS' || !triageOut.result) {
       await main.updateTaskActivity({
         taskId: ctx.taskId,
         updateStage: {
           eventId,
           status: 'FAILED',
-          error: out.errorText ?? 'analyzeDefect failed',
+          error: triageOut.errorText ?? 'triageDefectIntent failed',
         },
       });
-      throw new Error(out.errorText ?? 'analyzeDefect failed');
+      throw new Error(triageOut.errorText ?? 'triageDefectIntent failed');
     }
-    const analysis = out.result;
+    const intent = triageOut.result;
 
-    // Trivial auto-approve gate: skip HITL for analyze when the agent
-    // self-classified the defect as trivial and env flag is on.
+    // ── Sub-agent 2: analyze with intent + repoMap ───────────────────
+    const analyzeOut = await sandboxAgent.analyzeDefectActivity(
+      ctx.sandboxState,
+      input.defectDescription,
+      intent,
+      repoNavigation ?? undefined,
+      feedback
+    );
+    await main.persistAgentInvocationActivity({
+      taskEventId: eventId,
+      capturedTrace: analyzeOut.capturedTrace,
+      errorText: analyzeOut.errorText,
+    });
+    if (analyzeOut.status !== 'SUCCESS' || !analyzeOut.result) {
+      await main.updateTaskActivity({
+        taskId: ctx.taskId,
+        updateStage: {
+          eventId,
+          status: 'FAILED',
+          error: analyzeOut.errorText ?? 'analyzeDefect failed',
+        },
+      });
+      throw new Error(analyzeOut.errorText ?? 'analyzeDefect failed');
+    }
+    // Attach intent so the persisted stage output is self-describing
+    // (HITL UI and PR body don't need a second lookup). The schema
+    // field is optional and designed for this composition.
+    const analysis: DefectAnalysis = { ...analyzeOut.result, intent };
+
+    // Trivial auto-approve gate: skip HITL for defects the agent
+    // self-classified as trivial when the env flag is on.
     const autoAnalyze = shouldAutoApproveAnalysis(
       analysis,
       ctx.config.autoApproveTrivial ? 'true' : undefined
@@ -67,7 +122,8 @@ export async function runAnalyze(
       return analysis;
     }
 
-    // HITL gate
+    // HITL gate — single gate at end of stage. Reviewer sees intent +
+    // candidateRootCauses + consideredStrategies in one document.
     await main.updateTaskActivity({
       taskId: ctx.taskId,
       updateStage: { eventId, status: 'AWAITING', output: analysis },
